@@ -14,7 +14,7 @@ browser on an approved device
    Open WebUI        the chat page and logins      this Mac only
         |
         v
-   usage relay       records who, when, how much   this Mac only
+   relay             records usage; owner's reserve this Mac only
         |
         v
       oMLX           runs the model                this Mac only
@@ -33,11 +33,11 @@ Both programs listen only on the Mac itself. The only way in from another device
 
 ## Status
 
-The baseline works: the server runs, the owner and guests have chatted from their own devices, and guests' conversations are not saved. Usage is recorded per user (who, when, which model, how many tokens, how long; never the text). Still to come: a way for the owner to reserve the server, a queue, and a status display. See [SPEC.md](SPEC.md) for the plan.
+The baseline works: the server runs, the owner and guests have chatted from their own devices, and guests' conversations are not saved. Usage is recorded per user (who, when, which model, how many tokens, how long; never the text). The owner can reserve the server with `./llm-reserve on`, and a badge in the chat page shows everyone whether it is free, in use or reserved. The owner can also reserve and release by clicking that badge. Still to come: a queue. See [SPEC.md](SPEC.md) for the plan.
 
 ## Measured speed
 
-On a Mac Studio (M1 Max, 64GB), measured 2026-10-12 straight at the model server with a short prompt and 300-token replies. Averages of 15 runs per model with it loaded, and 5 swaps into each.
+On a Mac Studio (M1 Max, 64GB), measured straight at the model server with a short prompt and 300-token replies. Averages of 15 runs per model with it loaded, and 5 swaps into each.
 
 | | Qwen3.6-35B-A3B, 4-bit | Laguna XS 2.1, 6-bit |
 | --- | --- | --- |
@@ -81,6 +81,7 @@ The step-by-step record of how this Mac was set up is in [OVERVIEW.md](OVERVIEW.
 | --- | --- |
 | Start | `./llm-start` |
 | Stop and free the model's memory | `./llm-stop` |
+| Reserve the server for the owner, release it, or see its state | `./llm-reserve on`, `off`, `status` |
 
 - Nothing starts by itself. After a reboot, run `./llm-start`.
 - While stopped, the address shows the page in `offline/index.html`. A small program hands it out; `llm-stop` starts it and `llm-start` ends it. After a reboot, run `./llm-stop` to bring the page back.
@@ -94,7 +95,9 @@ To add a guest: share the Mac with them in Tailscale's admin console, have them 
 | --- | --- |
 | `llm-start`, `llm-stop` | Start and stop both programs |
 | `start-open-webui.sh` | Loads the settings and launches Open WebUI |
-| `usage-relay.py` | Sits between Open WebUI and oMLX and records usage per request in `usage.csv` |
+| `relay.py` | Sits between Open WebUI and oMLX. Records usage per request in `usage.csv`, and refuses guests' requests while the owner has reserved the server |
+| `chat-page/loader.js` | The status badge added to the chat page (free, in use, reserved) |
+| `llm-reserve` | The owner's command to reserve the server, release it, or see its state |
 | `load-local-env.zsh` | Loads the address and ports from `local.env` for the scripts |
 | `local.env.example` | The layout of `local.env`, with placeholder values |
 | `git-hooks/pre-commit` | The check git runs before every commit to keep secrets out |

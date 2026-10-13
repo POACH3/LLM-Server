@@ -31,17 +31,21 @@ else
   echo "oMLX is up."
 fi
 
-# The usage relay sits between the chat page and oMLX and records who used
-# which model, how many tokens and for how long. Never the text.
+# The relay sits between the chat page and oMLX. It records who used which
+# model, how many tokens and for how long (never the text), and it is where
+# the owner reserves the server (see llm-reserve). A reservation does not
+# carry over: the server is always unreserved after a start.
 if listening "$RELAY_PORT"; then
-  echo "Usage relay is already running."
+  echo "Relay is already running."
 else
-  echo "Starting the usage relay..."
-  nohup /usr/bin/python3 ./usage-relay.py "$RELAY_PORT" "$OMLX_PORT" \
-    ./usage.csv >> ./usage-relay.log 2>&1 &
+  echo "Starting the relay..."
+  # The last value is where the relay asks the chat page's server whether a
+  # click on the badge's switch comes from a signed-in owner.
+  nohup /usr/bin/python3 ./relay.py "$RELAY_PORT" "$OMLX_PORT" \
+    ./usage.csv "http://127.0.0.1:$WEBUI_PORT/api/v1/auths/" >> ./relay.log 2>&1 &
   disown
-  wait_for "$RELAY_PORT" 10 || { echo "The usage relay did not start. See $DIR/usage-relay.log"; exit 1; }
-  echo "Usage relay is up."
+  wait_for "$RELAY_PORT" 10 || { echo "The relay did not start. See $DIR/relay.log"; exit 1; }
+  echo "Relay is up."
 fi
 
 if listening "$WEBUI_PORT"; then
@@ -52,6 +56,13 @@ else
   disown
   wait_for "$WEBUI_PORT" 120 || { echo "Open WebUI did not start. See $DIR/open-webui.log"; exit 1; }
   echo "Open WebUI is up."
+fi
+
+# Add the status badge to the chat page (free, in use, reserved). Open WebUI
+# empties its page-extras folder at every start, so this comes after it is up.
+if [ -d ./open-webui-static ]; then
+  cp ./chat-page/loader.js ./open-webui-static/loader.js \
+    || echo "Could not add the status badge to the chat page."
 fi
 
 # Point the Tailscale address back at the chat page (llm-stop switches it to
@@ -65,6 +76,17 @@ if [ -x "$TS" ]; then
     switched=no
     echo "Could not point the Tailscale address at the chat page. Run: tailscale serve --bg $WEBUI_PORT"
   fi
+fi
+# Let the badge reach the relay. Two addresses are passed to it and nothing
+# else on the relay is reachable from other devices:
+#   /llm-status   the read-only state, for everyone's badge.
+#   /llm-reserve  the owner's switch. The relay refuses it unless the request
+#                 carries the sign-in of an owner, which it checks itself.
+if [ -x "$TS" ]; then
+  "$TS" serve --bg --set-path /llm-status "http://127.0.0.1:$RELAY_PORT/relay/status" >/dev/null 2>&1 \
+    || echo "Could not make the server's state readable by the status badge."
+  "$TS" serve --bg --set-path /llm-reserve "http://127.0.0.1:$RELAY_PORT/relay/owner-reserve" >/dev/null 2>&1 \
+    || echo "Could not make the owner's switch on the status badge reachable."
 fi
 if [ "$switched" = yes ]; then
   offline_pids=($(lsof -nP -tiTCP:"$OFFLINE_PORT" -sTCP:LISTEN 2>/dev/null))

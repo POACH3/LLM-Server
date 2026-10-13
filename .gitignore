@@ -9,6 +9,8 @@ omlx-api-key
 # Open WebUI's data: accounts, password hashes, saved chats, uploaded files,
 # and a plain-text copy of the oMLX key.
 open-webui-data/
+# Open WebUI's own page extras, which it copies here at every start.
+open-webui-static/
 
 # Logs: device addresses and usage times; later, per-user usage records.
 *.log

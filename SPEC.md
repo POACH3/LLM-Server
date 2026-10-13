@@ -1,7 +1,7 @@
 # Private LLM Server: Design Spec
 
 - **As of:** 2026-10-12 (first written 2026-09-30)
-- **Status:** M0 (baseline) is complete: the server runs and guests have used it. M1 (measure) has begun with two investigations. The next thing to build is the logging relay (M2a). The server is currently stopped.
+- **Status:** M0 (baseline) is complete: the server runs and guests have used it. M1 (measure) has begun with two investigations. The relay is built: it records usage (M2a) and lets the owner reserve the server from the Mac (first part of M2b). A badge in the chat page shows free, in use or reserved. The owner can reserve from the Mac or by clicking the badge. The server is currently stopped.
 - **What this file is:** how the owner wants this project built: goals, constraints, architecture, features and plans.
 - **Companion file:** [OVERVIEW.md](OVERVIEW.md) holds everything about what was actually done: decisions, what is installed and how it is configured, measurements, findings, and notes from each tool's documentation.
 - **Audience:** a Claude agent (or human) implementing or extending this project.
@@ -29,8 +29,8 @@ No check is needed at the start of each session. Run the probe again only after 
 **Rules added late in that session, easy to miss.** Claude never modifies its own permissions (the settings files): give the owner the exact text to paste, then read it back. Claude asks before creating or changing any rule or hook. The real Tailscale address and port numbers live only in `local.env` and `CLAUDE.local.md`; every tracked file uses `$TAILSCALE_HOST`, `$OMLX_PORT`, `$WEBUI_PORT`, `$OFFLINE_PORT` and `$RELAY_PORT`. Full text in `.claude/rules/`.
 
 **What the owner wants next, in their order of interest.**
-1. **Logging relay (F12, milestone M2a).** Chosen as the next thing to build. First step done 2026-10-12: with `ENABLE_FORWARD_USER_INFO_HEADERS=true` in `open-webui.env`, Open WebUI does send the user's name, id, email and role on each request. The relay itself (`usage-relay.py`, custom, the owner's choice) was built and wired in the same day and records to `usage.csv`. Still to do: summaries on demand (per user per day, per model, longest requests), and a test with a guest's temporary chat, Stop and a long reply.
-2. **Reserve and status (M2b).** Built onto the relay: the owner can block other users from the model; a guest's in-flight reply finishes; new guest requests are refused with a clear message; a badge in the chat page shows free, in use or reserved to everyone, with the owner's switch on it.
+1. **Relay: usage records (F12, milestone M2a).** Chosen as the next thing to build. First step done 2026-10-12: with `ENABLE_FORWARD_USER_INFO_HEADERS=true` in `open-webui.env`, Open WebUI does send the user's name, id, email and role on each request. The relay itself (now `relay.py`, custom, the owner's choice) was built and wired in the same day and records to `usage.csv`. Still to do: summaries on demand (per user per day, per model, longest requests), and a test with a guest's temporary chat, Stop and a long reply.
+2. **Reserve and status (M2b).** First part built and tested 2026-10-12: the owner reserves from the Mac with `./llm-reserve on` / `off` / `status`, and a guest who sends a message is shown the refusal. The badge in the chat page was added the same day. The owner's switch on the badge followed, completing M2b apart from the owner's own test in a browser. The full feature, built onto the relay: the owner can block other users from the model; a guest's in-flight reply finishes; new guest requests are refused with a clear message; a badge in the chat page shows free, in use or reserved to everyone, with the owner's switch on it.
 3. **A permanent notice for guests** that chats are not saved and usage is recorded, to go live with the relay.
 4. **Remove "Open WebUI" branding.** Waiting on the owner for a name, and a logo if wanted. Needs a re-runnable patch script (section 10).
 
@@ -265,7 +265,7 @@ The owner wants to know which models each user uses, how many tokens they consum
 - **Never record** prompt or reply text.
 - **Summaries on demand:** per user per day, per model, longest requests.
 - **Transparency (F9):** guests are told that usage (who, when, how much) is recorded, in the same notice that tells them chats are not saved.
-- **How (DECIDED): a logging relay** between the front end and the model server. Each request passes through it; it records the fields above and forwards the request unchanged. The front end attaches the user's name and account id to each request it forwards (Open WebUI has a setting for this), and the relay reads them. This relay is the first slice of the M2 gatekeeper and sits in the same place, so the queue, owner priority and request cancelling are built onto it later.
+- **How (DECIDED): a relay** between the front end and the model server. Each request passes through it; it records the fields above and forwards the request unchanged. The front end attaches the user's name and account id to each request it forwards (Open WebUI has a setting for this), and the relay reads them. This relay is the first slice of the M2 gatekeeper and sits in the same place, so the queue, owner priority and request cancelling are built onto it later.
 - **Options considered and not chosen:** (a) an Open WebUI plugin that records the same fields: nothing new to run, but tied to Open WebUI and unverified for temporary chats; (b) matching up the existing oMLX and Open WebUI logs by time: no changes, but it identifies devices rather than accounts and fails when requests overlap. Option (b) remains available for a rough look at past days.
 - **Requirements on the relay:** independent of the front end (works if Open WebUI is replaced); model-agnostic (no model names in code); listens on this Mac only; started and stopped by the same start and stop commands; if the relay is down the chat page shows a clear error rather than silently bypassing it; streaming replies must pass through without added delay.
 - **Acceptance:** after a guest and the owner each send messages, the log shows one row per request with the right user, model, token counts and duration, and contains no message text.
@@ -276,8 +276,8 @@ The owner wants to know which models each user uses, how many tokens they consum
 - [x] **M0 Baseline.** Done 2026-10-12. oMLX, Open WebUI and Tailscale installed; one everyday model; admin account first; guests chatted from their own devices. The step-by-step record is in OVERVIEW.md section 7.
 - [ ] **M1 Measure.** Time long-document prompts, generation speed, memory use, model swaps and cache behavior (section 8). Use the results to choose the model server and to decide whether an upgrade is needed. Decide whether two resident models are viable.
 - [ ] **M2 Gatekeeper.** Proxy in front of the model server, built in slices:
-  - [x] **M2a Logging relay (F12).** Built 2026-10-12 as a custom relay writing `usage.csv`. Still to do: summaries on demand, the guest notice, and a test with a guest's chat.
-  - [ ] **M2b Reserve and status (owner priority 2026-10-12).** The owner can block other users from the model; an in-flight guest reply finishes; the relay reports free, in use or reserved; a badge in the chat page shows it to everyone, with the owner's switch on it.
+  - [x] **M2a Relay, usage records (F12).** Built 2026-10-12 as a custom relay writing `usage.csv`. Still to do: summaries on demand, the guest notice, and a test with a guest's chat.
+  - [x] **M2b Reserve and status (owner priority 2026-10-12).** Part done 2026-10-12: reserving from the Mac (`llm-reserve`), refusal message, and the relay reporting free, in use or reserved. The badge in the chat page is also done. The owner's switch on the badge is done too. In full: The owner can block other users from the model; an in-flight guest reply finishes; the relay reports free, in use or reserved; a badge in the chat page shows it to everyone, with the owner's switch on it.
   - [ ] **M2c** Single-request limit and queue, user count.
   - [ ] **M2d** Request cancel or time limit.
 - [ ] **M3 Status page.** Queue position, user count, owner-priority banner, messaging.
@@ -348,7 +348,7 @@ Record results in OVERVIEW.md (measurements and log) so later work uses measured
 - Does the oMLX disk cache count as "saved data" for the transparency requirement, and what lifetime should it have?
 - Where do the F10 indicators live: inside Open WebUI or on a separate status page?
 - How does the gatekeeper identify the user behind each request? (Answered 2026-10-12: Open WebUI's user-info headers, tested and switched on. Still open: whether to use the signed form.)
-- Custom relay or LiteLLM for the logging relay? (R3; lean custom for a pass-through this small.)
+- Custom relay or LiteLLM? Answered 2026-10-12: custom (`relay.py`).
 - Should the machine stay available overnight? (Owner: no preference; revisit after M1.)
 - Is a hardware upgrade justified? (Only from M1 measurements.)
 

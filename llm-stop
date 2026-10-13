@@ -64,5 +64,5 @@ if [ -x "$TS" ]; then
 fi
 
 stop_port "Open WebUI" "$WEBUI_PORT"
-stop_port "Usage relay" "$RELAY_PORT"
+stop_port "Relay" "$RELAY_PORT"
 stop_port "oMLX" "$OMLX_PORT"

@@ -20,7 +20,9 @@ port_state() {  # name, port
 
 echo "Project folder: $DIR"
 port_state "oMLX (model server)" "$OMLX_PORT"
-port_state "Usage relay" "$RELAY_PORT"
+port_state "Relay (usage records, reserve)" "$RELAY_PORT"
+reserve="$(curl -s -m 3 "http://127.0.0.1:$RELAY_PORT/relay/status" | sed -n 's/.*"state": *"\([^"]*\)".*/\1/p')"
+[ -n "$reserve" ] && echo "Server is: $reserve"
 port_state "Open WebUI (chat page)" "$WEBUI_PORT"
 port_state "Offline page (shown while stopped)" "$OFFLINE_PORT"
 

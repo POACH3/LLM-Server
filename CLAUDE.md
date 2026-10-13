@@ -11,12 +11,12 @@ A private AI chat service on the owner's Mac Studio (M1 Max, 64GB) for the owner
 ## How it fits together
 
 ```
-browser -> Tailscale (https://$TAILSCALE_HOST) -> Open WebUI 127.0.0.1:$WEBUI_PORT -> usage relay 127.0.0.1:$RELAY_PORT -> oMLX 127.0.0.1:$OMLX_PORT -> model in ~/models
+browser -> Tailscale (https://$TAILSCALE_HOST) -> Open WebUI 127.0.0.1:$WEBUI_PORT -> relay 127.0.0.1:$RELAY_PORT -> oMLX 127.0.0.1:$OMLX_PORT -> model in ~/models
 ```
 
 The real address and port numbers are in `local.env` (not in git), which every script reads, and are listed for you in `CLAUDE.local.md` (not in git). Tracked files use the placeholders `$TAILSCALE_HOST`, `$OMLX_PORT`, `$WEBUI_PORT`, `$OFFLINE_PORT` and `$RELAY_PORT`. Never write the real values into a tracked file.
 
-The usage relay (`usage-relay.py`, SPEC.md F12, milestone M2a) records one row per chat request in `usage.csv`: who, when, which model, how many tokens, how long. Never the text. Next to be built onto it: the owner's "reserve the server" switch and the in-use status (M2b).
+The relay (`relay.py`, the first slices of SPEC.md's gatekeeper) does two jobs. It records one row per chat request in `usage.csv`: who, when, which model, how many tokens, how long, never the text (F12, M2a). And it is where the owner reserves the server: while reserved, new chat requests from anyone but an admin are refused with a clear message (F4, M2b; switched with `./llm-reserve`). A badge in the chat page (`chat-page/loader.js`) shows everyone free, in use or reserved; it reads the relay's state through the address `/llm-status`. For an admin the badge is also the switch: a click goes to `/llm-reserve`, and the relay checks the sender's sign-in with Open WebUI before changing anything.
 
 ## Commands
 
@@ -24,6 +24,7 @@ The usage relay (`usage-relay.py`, SPEC.md F12, milestone M2a) records one row p
 | --- | --- |
 | Start both servers | `./llm-start` |
 | Stop both and free the model's memory | `./llm-stop` |
+| Reserve for the owner, release, or show the state | `./llm-reserve on`, `off`, `status` |
 | See what is running | `./.claude/skills/server-status/status.sh` |
 
 Starting and stopping affects the owner's guests. Ask before running either.
@@ -33,7 +34,10 @@ Starting and stopping affects the owner's guests. Ask before running either.
 | Path | What it is | In git |
 | --- | --- | --- |
 | `llm-start`, `llm-stop`, `start-open-webui.sh` | Start and stop scripts (zsh) | Yes |
-| `usage-relay.py` | The usage relay between Open WebUI and oMLX (started and stopped with the rest) | Yes |
+| `relay.py` | The relay between Open WebUI and oMLX: usage records and the owner's reservation (started and stopped with the rest) | Yes |
+| `chat-page/loader.js` | The status badge shown in the chat page; `llm-start` copies it into `open-webui-static/` after Open WebUI is up | Yes |
+| `open-webui-static/` | Open WebUI's page extras, which it empties and refills at every start | No |
+| `llm-reserve` | Reserve the server for the owner, release it, or show its state (zsh) | Yes |
 | `usage.csv` | The usage records the relay writes | No |
 | `open-webui.env` | Open WebUI settings, commented, no secrets | Yes |
 | `offline/index.html`, `offline-page.py` | The page shown at the Tailscale address while stopped, and the small program that hands it out (started by `llm-stop`, ended by `llm-start`) | Yes |

@@ -1,0 +1,39 @@
+#!/bin/zsh
+# Reserves the private LLM server for the owner, or releases it.
+#
+#   llm-reserve on       New chat requests from anyone but the owner are
+#                        refused with a clear message. A reply already in
+#                        progress finishes. The owner's requests go through.
+#   llm-reserve off      Back to normal.
+#   llm-reserve status   Shows free, in use or reserved.
+#
+# The reservation lives in the relay and is off again after every llm-start,
+# so undoing it is "llm-reserve off" or a restart.
+DIR="${0:A:h}"
+source "$DIR/load-local-env.zsh"
+
+URL="http://127.0.0.1:$RELAY_PORT/relay"
+
+show() {  # the relay's answer, as JSON
+  local state count
+  state="$(print -r -- "$1" | sed -n 's/.*"state": *"\([^"]*\)".*/\1/p')"
+  count="$(print -r -- "$1" | sed -n 's/.*"requests_in_progress": *\([0-9]*\).*/\1/p')"
+  if [ -z "$state" ]; then
+    echo "The relay gave an answer that was not understood."
+    return 1
+  fi
+  echo "Server is $state. Requests in progress: ${count:-0}."
+}
+
+case "$1" in
+  on)     answer="$(curl -s -m 5 -X POST -H 'Content-Type: application/json' -d '{"on": true}' "$URL/reserve")" ;;
+  off)    answer="$(curl -s -m 5 -X POST -H 'Content-Type: application/json' -d '{"on": false}' "$URL/reserve")" ;;
+  status) answer="$(curl -s -m 5 "$URL/status")" ;;
+  *)      echo "Usage: llm-reserve on | off | status"; exit 1 ;;
+esac
+
+if [ -z "$answer" ]; then
+  echo "The relay is not running, so nothing is reserved. Start the server with llm-start."
+  exit 1
+fi
+show "$answer"

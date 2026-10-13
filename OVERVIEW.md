@@ -25,7 +25,7 @@ https://$TAILSCALE_HOST        <- the address everyone uses
 Open WebUI  (chat page, logins)        127.0.0.1:$WEBUI_PORT, this Mac only
         |
         v
-Usage relay  (records usage)           127.0.0.1:$RELAY_PORT, this Mac only
+Relay  (usage records, reserving)      127.0.0.1:$RELAY_PORT, this Mac only
         |
         v
 oMLX  (runs the model)                 127.0.0.1:$OMLX_PORT, this Mac only
@@ -111,7 +111,8 @@ To remove a guest, revoke the share in Tailscale and delete or deactivate the ac
 | Login length | 7 days |
 | Reply length | Capped at 20,000 tokens, roughly 5 to 11 minutes at worst |
 | Hidden prompt from Open WebUI's built-in tools | Leave as is; 5 to 6 seconds per conversation is acceptable |
-| Usage logging | Record per request who, which model, how many tokens and how long, never the text; built as a logging relay between Open WebUI and oMLX |
+| Usage logging | Record per request who, which model, how many tokens and how long, never the text; done by the relay between Open WebUI and oMLX, written to `usage.csv` |
+| Reserving the server | The owner reserves it with `llm-reserve on`: a guest's reply in progress finishes, new guest requests are refused with a clear message, the owner's go through; it clears on restart |
 | Budget | No hardware purchase without measurements that justify it |
 
 ### Interview answers in detail (Stage 0, 2026-09-30 to 2026-10-10)
@@ -272,7 +273,10 @@ Update this section whenever the setup changes.
 | `~/Documents/Code/llm-server/offline/index.html` | The page shown at the Tailscale address while the server is stopped. One self-contained file; loads nothing from anywhere else |
 | `~/Documents/Code/llm-server/offline-page.py` | The small program that hands out that page on 127.0.0.1:$OFFLINE_PORT. Started by `llm-stop`, ended by `llm-start`. Uses the Mac's own `/usr/bin/python3`, records no requests, about 20MB of memory |
 | `~/Documents/Code/llm-server/offline-message.txt` | Plain text shown instead if the page program fails to start (first line only) |
-| `~/Documents/Code/llm-server/usage-relay.py` | The usage relay on 127.0.0.1:$RELAY_PORT. Passes every request from Open WebUI on to oMLX and records one row per chat request. Started and stopped by `llm-start` and `llm-stop`. Uses the Mac's own `/usr/bin/python3`. For streamed replies it adds a standard flag asking oMLX to report token counts |
+| `~/Documents/Code/LLM-Server/chat-page/loader.js` | The status badge: a small pill showing "server free", "server occupied" or "server reserved by owner". It sits at the bottom left of the chat area, just to the right of the left pane, and on a phone just above the chat box at its left end. For an admin it also shows "reserve" or "release" and is clickable. It asks the address `/llm-status` every 2 seconds and hides itself if there is no answer (as at the Mac's own `localhost` address) |
+| `~/Documents/Code/LLM-Server/open-webui-static/` | Open WebUI's page-extras folder (`STATIC_DIR`), kept in the project so its installed files are not touched. Open WebUI empties and refills it at every start; `llm-start` then copies the badge in as `loader.js`. Not in git |
+| `~/Documents/Code/llm-server/llm-reserve` | `llm-reserve on`, `off` or `status`: reserves the server for the owner, releases it, or shows free, in use or reserved |
+| `~/Documents/Code/llm-server/relay.py` | The relay on 127.0.0.1:$RELAY_PORT. Passes every request from Open WebUI on to oMLX, records one row per chat request, and while the server is reserved refuses chat requests from anyone whose role is not admin (they are recorded as "refused: reserved"). Started and stopped by `llm-start` and `llm-stop`. Uses the Mac's own `/usr/bin/python3`. For streamed replies it adds a standard flag asking oMLX to report token counts |
 | `~/Documents/Code/llm-server/usage.csv` | The usage records: time, user name, user id, model, prompt tokens, reply tokens, seconds, how it ended. No text. Not in git; readable only by this Mac account. Opens in a text editor or spreadsheet |
 | `~/Documents/Code/llm-server/start-open-webui.sh` | Loads the settings and key, runs Open WebUI in the foreground (used by `llm-start`) |
 | `~/Documents/Code/llm-server/SPEC.md`, `OVERVIEW.md`, `CLAUDE.md` | The project documents, and the summary Claude Code reads at the start of a session |
@@ -328,6 +332,8 @@ When a permission needs changing, Claude gives you the text and you paste it int
 - **Documents:** an uploaded document's full text is placed in the conversation (no search index).
 - **Reply length:** oMLX's default limit is 20,000 tokens per reply (`sampling.max_tokens` in `~/.omlx/settings.json`; edit only while oMLX is stopped).
 - **Usage records:** Open WebUI sends each model request to the relay (its saved connection address was changed to the relay's port on 2026-10-12), with the user's name and id attached (`ENABLE_FORWARD_USER_INFO_HEADERS=true`). Tested with one message from the admin account: the row's token counts matched oMLX's own log. Not tested: a guest's temporary chat, Stop, and long replies through the relay.
+- **Owner's switch:** for an admin the badge shows "reserve" or "release" and is clickable. The click goes to `/llm-reserve`, which Tailscale Serve passes to the relay, carrying the page's sign-in token. The relay hands that token to Open WebUI on this Mac (`/api/v1/auths/`) and acts only if the answer is an admin; it does not keep or log the token. Tested against the real Open WebUI from the Mac: no token and a made-up token are both refused. The safety of the switch rests on Open WebUI's sign-in.
+- **Status badge:** Tailscale Serve passes three addresses: `/` to the chat page, `/llm-status` to the relay's read-only state, and `/llm-reserve` to the owner's switch. The state (free, in use, reserved, and how many requests are in progress) is readable by any device that can reach the Tailscale address, signed in or not. Tested from the Mac: reserving cannot be reached through the Tailscale address. Open WebUI's API documentation page loses its styling with the folder moved; it is not used here.
 - **Default model:** new chats start on the Qwen model for everyone (`ui.default_models` in Open WebUI's saved settings, set 2026-10-12). Without it Open WebUI picks the first model alphabetically. A person's own chosen default overrides it. If the default model is ever removed, change this setting in Admin Panel, Settings, Models.
 - **Models:** every model oMLX offers is available to every approved user (`BYPASS_MODEL_ACCESS_CONTROL=true`).
 

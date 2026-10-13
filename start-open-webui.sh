@@ -13,8 +13,14 @@ source ./open-webui.env
 set +a
 # Data folder (accounts, settings, uploads) sits next to this script.
 export DATA_DIR="$DIR/open-webui-data"
+# Folder Open WebUI serves its page extras from (icons, and the loader.js it
+# loads on every page). Kept next to this script, so the status badge can be
+# added without touching Open WebUI's installed files. Open WebUI empties and
+# refills this folder at every start; llm-start then copies the badge in.
+export STATIC_DIR="$DIR/open-webui-static"
+mkdir -p "$STATIC_DIR"
 export OPENAI_API_KEY="$(cat ./omlx-api-key)"
-# Where requests for the model go: the usage relay, which passes them on to
+# Where requests for the model go: the relay, which passes them on to
 # the model server. (Open WebUI saves this address in its database on first
 # start; after that it is changed in Admin Panel, Settings, Connections.)
 # And which page addresses may call the API: the Tailscale address (guests
