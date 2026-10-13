@@ -13,6 +13,7 @@ open-webui-data/
 # Logs: device addresses and usage times; later, per-user usage records.
 *.log
 logs/
+usage.csv
 *.sqlite3
 *.db
 *.db-shm

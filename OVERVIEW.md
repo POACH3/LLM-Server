@@ -5,7 +5,7 @@
 - **Picking up in a new chat:** the handoff at the top of [SPEC.md](SPEC.md) says what to check first and what comes next. The last rows of the log in `LOGS.local.md` (not in git) say what happened most recently.
 - **What this file is:** the record of what was actually done: decisions, what is installed and how it is set up, measurements, findings, and notes from each tool's documentation. The dated log is kept separately in `LOGS.local.md`.
 - **Companion file:** [SPEC.md](SPEC.md) holds how you want the project built: goals, constraints, architecture, features and plans.
-- **Placeholders:** this file never shows the real Tailscale address or port numbers. `$TAILSCALE_HOST`, `$OMLX_PORT`, `$WEBUI_PORT` and `$OFFLINE_PORT` stand for the values kept in `local.env`, which is not in git; `(tailnet name)`, `(machine name)` and `(Tailscale IP)` stand for the parts of the address. Earlier log rows were edited on 2026-10-12 to use them.
+- **Placeholders:** this file never shows the real Tailscale address or port numbers. `$TAILSCALE_HOST`, `$OMLX_PORT`, `$WEBUI_PORT`, `$OFFLINE_PORT` and `$RELAY_PORT` stand for the values kept in `local.env`, which is not in git; `(tailnet name)`, `(machine name)` and `(Tailscale IP)` stand for the parts of the address. Earlier log rows were edited on 2026-10-12 to use them.
 - **Section numbers:** in notes moved here from the spec, "section N" refers to SPEC.md unless it says otherwise.
 
 ## 1. What this is
@@ -23,6 +23,9 @@ https://$TAILSCALE_HOST        <- the address everyone uses
         |
         v
 Open WebUI  (chat page, logins)        127.0.0.1:$WEBUI_PORT, this Mac only
+        |
+        v
+Usage relay  (records usage)           127.0.0.1:$RELAY_PORT, this Mac only
         |
         v
 oMLX  (runs the model)                 127.0.0.1:$OMLX_PORT, this Mac only
@@ -251,6 +254,8 @@ Update this section whenever the setup changes.
 | `~/Documents/Code/llm-server/offline/index.html` | The page shown at the Tailscale address while the server is stopped. One self-contained file; loads nothing from anywhere else |
 | `~/Documents/Code/llm-server/offline-page.py` | The small program that hands out that page on 127.0.0.1:$OFFLINE_PORT. Started by `llm-stop`, ended by `llm-start`. Uses the Mac's own `/usr/bin/python3`, records no requests, about 20MB of memory |
 | `~/Documents/Code/llm-server/offline-message.txt` | Plain text shown instead if the page program fails to start (first line only) |
+| `~/Documents/Code/llm-server/usage-relay.py` | The usage relay on 127.0.0.1:$RELAY_PORT. Passes every request from Open WebUI on to oMLX and records one row per chat request. Started and stopped by `llm-start` and `llm-stop`. Uses the Mac's own `/usr/bin/python3`. For streamed replies it adds a standard flag asking oMLX to report token counts |
+| `~/Documents/Code/llm-server/usage.csv` | The usage records: time, user name, user id, model, prompt tokens, reply tokens, seconds, how it ended. No text. Not in git; readable only by this Mac account. Opens in a text editor or spreadsheet |
 | `~/Documents/Code/llm-server/start-open-webui.sh` | Loads the settings and key, runs Open WebUI in the foreground (used by `llm-start`) |
 | `~/Documents/Code/llm-server/SPEC.md`, `OVERVIEW.md`, `CLAUDE.md` | The project documents, and the summary Claude Code reads at the start of a session |
 | `~/Documents/Code/llm-server/.claude/` | Claude Code settings, hooks, skills, rules and an output style for this project |
@@ -304,6 +309,7 @@ When a permission needs changing, Claude gives you the text and you paste it int
 - **Extra model requests:** automatic titles, tags, follow-ups, autocomplete and query generation off; code interpreter and execution off; memories, notes, channels, ratings, arena and chat sharing off.
 - **Documents:** an uploaded document's full text is placed in the conversation (no search index).
 - **Reply length:** oMLX's default limit is 20,000 tokens per reply (`sampling.max_tokens` in `~/.omlx/settings.json`; edit only while oMLX is stopped).
+- **Usage records:** Open WebUI sends each model request to the relay (its saved connection address was changed to the relay's port on 2026-10-12), with the user's name and id attached (`ENABLE_FORWARD_USER_INFO_HEADERS=true`). Tested with one message from the admin account: the row's token counts matched oMLX's own log. Not tested: a guest's temporary chat, Stop, and long replies through the relay.
 - **Models:** every model oMLX offers is available to every approved user (`BYPASS_MODEL_ACCESS_CONTROL=true`).
 
 ## 11. Tool notes: what was found in documentation and source code
@@ -377,7 +383,7 @@ Version 0.11.4, installed with `uv tool install --python 3.11 "open-webui==0.11.
 - **Accounts.** The first account becomes the admin and sign-up then closes by itself. New accounts take the default role (pending). The email is only a login name and is not verified. With password validation on, the default rule is 8+ characters with upper, lower, digit and symbol. Login length is `auth.jwt_expiry` (default 4 weeks; now 7 days). The login-signing key is generated into `.webui_secret_key` in the working directory, and logins survive restarts as long as that file is kept.
 - **Outbound calls found in the source.** A version check to GitHub (`ENABLE_VERSION_UPDATE_CHECK`); a Hugging Face download of the default embedding model on first use; a default connection to `api.openai.com` unless the base URL is set; OpenTelemetry export, off by default. `OFFLINE_MODE=true` blocks the first two. No analytics code was found in the three main source files read; the rest was not audited.
 - **Uploads.** Stored in `DATA_DIR/uploads`. With `BYPASS_EMBEDDING_AND_RETRIEVAL=true` a document's whole text goes into the conversation and no embedding model is needed.
-- **User identity for the model server.** `ENABLE_FORWARD_USER_INFO_HEADERS=true` makes it attach the user's name, id, email and role, plus chat and message ids, as headers on each request it forwards; a signed-token form is available. Off by default and off here until the logging relay is built.
+- **User identity for the model server.** `ENABLE_FORWARD_USER_INFO_HEADERS=true` makes it attach the user's name, id, email and role, plus chat and message ids, as headers on each request it forwards; a signed-token form is available. Off by default; switched on here in `open-webui.env` on 2026-10-12. **Tested here the same day** with a stand-in for the model server and one message from the admin account: the chat request carried `X-OpenWebUI-User-Name`, `-User-Id` (36 characters), `-User-Email`, `-User-Role`, `-Chat-Id` and `-Auth-Type`, and the requests for the model list carried the same without the chat id. No message id header was seen. Not tested: an ordinary user's temporary chat.
 - **Usage dashboard.** Its admin analytics report per user and per model from saved chat messages, so temporary chats are not counted. Switched off here.
 - **Built-in tools.** By default it attaches descriptions of its built-in tools to every request (about 3,300 tokens for a user, 4,500 for the admin). A global default model capability, `builtin_tools`, switches them off. Left on, by your decision.
 - **Stored credentials.** It keeps the model server's API key in plain text in `webui.db`.

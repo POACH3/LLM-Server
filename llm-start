@@ -31,6 +31,19 @@ else
   echo "oMLX is up."
 fi
 
+# The usage relay sits between the chat page and oMLX and records who used
+# which model, how many tokens and for how long. Never the text.
+if listening "$RELAY_PORT"; then
+  echo "Usage relay is already running."
+else
+  echo "Starting the usage relay..."
+  nohup /usr/bin/python3 ./usage-relay.py "$RELAY_PORT" "$OMLX_PORT" \
+    ./usage.csv >> ./usage-relay.log 2>&1 &
+  disown
+  wait_for "$RELAY_PORT" 10 || { echo "The usage relay did not start. See $DIR/usage-relay.log"; exit 1; }
+  echo "Usage relay is up."
+fi
+
 if listening "$WEBUI_PORT"; then
   echo "Open WebUI is already running."
 else

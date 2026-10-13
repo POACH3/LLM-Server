@@ -5,19 +5,19 @@ if [ ! -f "$DIR/local.env" ]; then
   exit 1
 fi
 source "$DIR/local.env"
-for _v in TAILSCALE_HOST OMLX_PORT WEBUI_PORT OFFLINE_PORT; do
+for _v in TAILSCALE_HOST OMLX_PORT WEBUI_PORT OFFLINE_PORT RELAY_PORT; do
   if [ -z "${(P)_v}" ]; then
     echo "$_v is not set in $DIR/local.env." >&2
     exit 1
   fi
 done
-case "$OMLX_PORT$WEBUI_PORT$OFFLINE_PORT" in
-  *[!0-9]*) echo "OMLX_PORT, WEBUI_PORT and OFFLINE_PORT in $DIR/local.env must be numbers." >&2; exit 1 ;;
+_ports=("$OMLX_PORT" "$WEBUI_PORT" "$OFFLINE_PORT" "$RELAY_PORT")
+_different=(${(u)_ports})
+case "${(j::)_ports}" in
+  *[!0-9]*) echo "The four port values in $DIR/local.env must be numbers." >&2; exit 1 ;;
 esac
-if [ "$OMLX_PORT" -lt 1 ] || [ "$WEBUI_PORT" -lt 1 ] || [ "$OFFLINE_PORT" -lt 1 ] \
-   || [ "$OMLX_PORT" = "$WEBUI_PORT" ] || [ "$OMLX_PORT" = "$OFFLINE_PORT" ] \
-   || [ "$WEBUI_PORT" = "$OFFLINE_PORT" ]; then
-  echo "OMLX_PORT, WEBUI_PORT and OFFLINE_PORT in $DIR/local.env must be three different port numbers." >&2
+if [ ${#_different} -ne ${#_ports} ] || [ ${_ports[(I)0]} -ne 0 ]; then
+  echo "The four port values in $DIR/local.env must be four different port numbers." >&2
   exit 1
 fi
-unset _v
+unset _v _ports _different

@@ -20,6 +20,7 @@ port_state() {  # name, port
 
 echo "Project folder: $DIR"
 port_state "oMLX (model server)" "$OMLX_PORT"
+port_state "Usage relay" "$RELAY_PORT"
 port_state "Open WebUI (chat page)" "$WEBUI_PORT"
 port_state "Offline page (shown while stopped)" "$OFFLINE_PORT"
 

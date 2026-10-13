@@ -13,7 +13,7 @@ paths:
 - Every server on this Mac listens on `127.0.0.1` only. The only way in from another device is Tailscale Serve.
 - Nothing starts at login, and nothing restarts by itself after the owner stops it. No launchd KeepAlive, no RunAtLoad, no watchdog loops.
 - Stopping must free the model's memory.
-- Never write the Tailscale address or a port number into a script or settings file. Scripts source `load-local-env.zsh` and use `$TAILSCALE_HOST`, `$OMLX_PORT`, `$WEBUI_PORT` and `$OFFLINE_PORT`.
+- Never write the Tailscale address or a port number into a script or settings file. Scripts source `load-local-env.zsh` and use `$TAILSCALE_HOST`, `$OMLX_PORT`, `$WEBUI_PORT`, `$OFFLINE_PORT` and `$RELAY_PORT`.
 - Scripts find their own location (`DIR="${0:A:h}"` in zsh) so the folder can be moved. Do not write absolute paths to this folder.
 - oMLX must always be started with its API key. Start it only through `llm-start`.
 - `open-webui.env` is loaded as shell: quote any value containing `;` or spaces. It holds no secrets.

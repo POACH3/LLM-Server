@@ -14,6 +14,9 @@ browser on an approved device
    Open WebUI        the chat page and logins      this Mac only
         |
         v
+   usage relay       records who, when, how much   this Mac only
+        |
+        v
       oMLX           runs the model                this Mac only
         |
         v
@@ -30,7 +33,7 @@ Both programs listen only on the Mac itself. The only way in from another device
 
 ## Status
 
-The baseline works: the server runs, the owner and guests have chatted from their own devices, and guests' conversations are not saved. Still to come: usage logging per user, a way for the owner to reserve the server, a queue, and a status display. See [SPEC.md](SPEC.md) for the plan.
+The baseline works: the server runs, the owner and guests have chatted from their own devices, and guests' conversations are not saved. Usage is recorded per user (who, when, which model, how many tokens, how long; never the text). Still to come: a way for the owner to reserve the server, a queue, and a status display. See [SPEC.md](SPEC.md) for the plan.
 
 ## Requirements
 
@@ -78,6 +81,7 @@ To add a guest: share the Mac with them in Tailscale's admin console, have them 
 | --- | --- |
 | `llm-start`, `llm-stop` | Start and stop both programs |
 | `start-open-webui.sh` | Loads the settings and launches Open WebUI |
+| `usage-relay.py` | Sits between Open WebUI and oMLX and records usage per request in `usage.csv` |
 | `load-local-env.zsh` | Loads the address and ports from `local.env` for the scripts |
 | `local.env.example` | The layout of `local.env`, with placeholder values |
 | `git-hooks/pre-commit` | The check git runs before every commit to keep secrets out |
@@ -99,6 +103,7 @@ These stay on the Mac and are ignored by git:
 | `omlx-api-key`, `.webui_secret_key` | Secrets |
 | `open-webui-data/` | Accounts, settings, saved chats and uploaded files |
 | `*.log` | Server logs |
+| `usage.csv` | Usage records |
 | Model files | Large, and downloaded separately |
 
 A check runs before every commit to enforce this. `git-hooks/pre-commit` cancels a commit that includes any of the items above, the value of a secret pasted into another file, or the real Tailscale address. It is switched on by the `git config` step in the setup section, and you can confirm it with `git config core.hooksPath`, which should print `git-hooks`.
@@ -107,7 +112,7 @@ A check runs before every commit to enforce this. `git-hooks/pre-commit` cancels
 
 - Prompts and replies never leave the Mac. Open WebUI runs in offline mode, with update checks and outside services switched off.
 - Guests' conversations are not saved. The admin's own are, unless a chat is set to temporary.
-- Logs hold timings and token counts, never the text of a conversation.
+- Logs and usage records hold who, when, timings and token counts, never the text of a conversation.
 - To produce an answer, the Mac has to see the prompt and reply while the request runs. Whoever operates the Mac is trusted not to record them.
 
 More detail is in [OVERVIEW.md](OVERVIEW.md), section 5.

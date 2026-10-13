@@ -14,8 +14,11 @@ set +a
 # Data folder (accounts, settings, uploads) sits next to this script.
 export DATA_DIR="$DIR/open-webui-data"
 export OPENAI_API_KEY="$(cat ./omlx-api-key)"
-# Where the model server is, and which page addresses may call the API: the
-# Tailscale address (guests and the owner's other devices) and this Mac.
-export OPENAI_API_BASE_URL="http://127.0.0.1:$OMLX_PORT/v1"
+# Where requests for the model go: the usage relay, which passes them on to
+# the model server. (Open WebUI saves this address in its database on first
+# start; after that it is changed in Admin Panel, Settings, Connections.)
+# And which page addresses may call the API: the Tailscale address (guests
+# and the owner's other devices) and this Mac.
+export OPENAI_API_BASE_URL="http://127.0.0.1:$RELAY_PORT/v1"
 export CORS_ALLOW_ORIGIN="https://$TAILSCALE_HOST;http://localhost:$WEBUI_PORT"
 exec "$HOME/.local/bin/open-webui" serve --host 127.0.0.1 --port "$WEBUI_PORT"

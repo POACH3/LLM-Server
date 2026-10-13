@@ -11,12 +11,12 @@ A private AI chat service on the owner's Mac Studio (M1 Max, 64GB) for the owner
 ## How it fits together
 
 ```
-browser -> Tailscale (https://$TAILSCALE_HOST) -> Open WebUI 127.0.0.1:$WEBUI_PORT -> oMLX 127.0.0.1:$OMLX_PORT -> model in ~/models
+browser -> Tailscale (https://$TAILSCALE_HOST) -> Open WebUI 127.0.0.1:$WEBUI_PORT -> usage relay 127.0.0.1:$RELAY_PORT -> oMLX 127.0.0.1:$OMLX_PORT -> model in ~/models
 ```
 
-The real address and port numbers are in `local.env` (not in git), which every script reads, and are listed for you in `CLAUDE.local.md` (not in git). Tracked files use the placeholders `$TAILSCALE_HOST`, `$OMLX_PORT`, `$WEBUI_PORT` and `$OFFLINE_PORT`. Never write the real values into a tracked file.
+The real address and port numbers are in `local.env` (not in git), which every script reads, and are listed for you in `CLAUDE.local.md` (not in git). Tracked files use the placeholders `$TAILSCALE_HOST`, `$OMLX_PORT`, `$WEBUI_PORT`, `$OFFLINE_PORT` and `$RELAY_PORT`. Never write the real values into a tracked file.
 
-A logging relay between Open WebUI and oMLX is the next thing to be built (SPEC.md F12, milestone M2a). It will also carry the owner's "reserve the server" switch and the in-use status.
+The usage relay (`usage-relay.py`, SPEC.md F12, milestone M2a) records one row per chat request in `usage.csv`: who, when, which model, how many tokens, how long. Never the text. Next to be built onto it: the owner's "reserve the server" switch and the in-use status (M2b).
 
 ## Commands
 
@@ -33,6 +33,8 @@ Starting and stopping affects the owner's guests. Ask before running either.
 | Path | What it is | In git |
 | --- | --- | --- |
 | `llm-start`, `llm-stop`, `start-open-webui.sh` | Start and stop scripts (zsh) | Yes |
+| `usage-relay.py` | The usage relay between Open WebUI and oMLX (started and stopped with the rest) | Yes |
+| `usage.csv` | The usage records the relay writes | No |
 | `open-webui.env` | Open WebUI settings, commented, no secrets | Yes |
 | `offline/index.html`, `offline-page.py` | The page shown at the Tailscale address while stopped, and the small program that hands it out (started by `llm-stop`, ended by `llm-start`) | Yes |
 | `offline-message.txt` | Plain text shown instead if the offline page program fails to start | Yes |
