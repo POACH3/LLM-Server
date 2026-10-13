@@ -40,6 +40,7 @@ Model files in ~/models
 | Open WebUI | The chat web page, accounts and logins | 0.11.4 (pinned) |
 | Tailscale | Private network that lets approved devices reach the Mac | 1.104.1 |
 | Model | Qwen3.6-35B-A3B, 4-bit MLX build from `mlx-community` | 20.4GB |
+| Second model | Laguna XS 2.1 (coding), 6-bit MLX build from `mlx-community` | 25GB |
 
 The two programs on the Mac listen only on the Mac itself. The only way in from another device is through Tailscale.
 
@@ -192,6 +193,22 @@ Single readings from normal use, not a benchmark.
 | Typical reply through the chat page | 17 to 42 seconds, mostly thinking |
 | Network delay, your iPhone at home | 5 milliseconds, direct connection |
 
+### Two-model speed test (2026-10-12)
+
+Measured straight at oMLX, not through the chat page or the relay. Short prompt (about 30 tokens), 300-token replies, nobody else using the server. Five rounds; each round switched to a model (one swap) and then ran it three more times. Averages, with lowest and highest.
+
+| | Qwen3.6-35B-A3B 4-bit | Laguna XS 2.1 6-bit |
+| --- | --- | --- |
+| Tokens per second, model loaded (15 runs each) | 69.9 (69.7 to 70.0) | 52.1 (51.8 to 52.4) |
+| Seconds to first token, model loaded (15 runs each) | 0.21 (0.20 to 0.21) | 0.25 (0.24 to 0.26) |
+| Seconds to first token when the other model must be swapped out first (5 swaps each) | 12.9 (9.1 to 15.1) | 8.2 (8.1 to 8.3) |
+| Memory once loaded (oMLX's log) | 19.3GB | 25.7GB |
+
+- The two models do not stay in memory together: each switch unloads one (about 4 s, from oMLX's log) and loads the other.
+- Swapping to Qwen took about 15 s three times and 9 to 10 s twice; the cause of the difference was not investigated.
+- Not covered: long prompts, where time to first token is dominated by reading the prompt; the chat page, which adds its own hidden prompt of 3,300 to 4,500 tokens and so a few seconds to the first message of each chat; several people at once; and answer quality.
+- Laguna's earlier single reading of about 39 tokens per second was a first run straight after loading; these figures replace it.
+
 ## 9. Known issues and findings
 
 1. **Slow replies.** Three causes were found: the model thinks at length before answering (17 to 42 seconds), which is the main one; Open WebUI's hidden prompt costs 5 to 6.5 seconds on the first message of each chat, which you decided to leave as is (see below); and the first message after starting waits about 6 seconds for the model to load. Thinking and the first-use load are still to be looked at in M1.
@@ -240,6 +257,7 @@ Update this section whenever the setup changes.
 | Open WebUI | 0.11.4 | `uv tool install --python 3.11 "open-webui==0.11.4"` | 127.0.0.1:$WEBUI_PORT | Pinned; upgrade deliberately with `uv tool install` and a new version number |
 | Tailscale | 1.104.1 | Standalone `.pkg` from tailscale.com | Tailnet address (Tailscale IP), HTTPS 443 via Serve | Machine name `(machine name)`; auto-updates in-app |
 | Model | `mlx-community/Qwen3.6-35B-A3B-4bit` | `hf download` | n/a | 20.4GB in `~/models/Qwen3.6-35B-A3B-4bit`, checksums verified |
+| Model (added 2026-10-12) | `mlx-community/Laguna-XS-2.1-6bit` | `hf download`, model data and settings files only (the repository's Python files were skipped) | n/a | Poolside's coding model, 33B parameters, 6-bit. 25GB in `~/models/Laguna-XS-2.1-6bit`, six data files match the published checksums. Single readings from one short test: loads in about 7 s, 25.9GB in memory, about 39 tokens per second. oMLX now reports it as its default model. Not tested: a real coding task, long prompts, and switching between the two models |
 | Tools | `uv` 0.12.24 (Homebrew), `hf` 2.2.0 (`uv tool`) | | | |
 
 ### Files
@@ -310,6 +328,7 @@ When a permission needs changing, Claude gives you the text and you paste it int
 - **Documents:** an uploaded document's full text is placed in the conversation (no search index).
 - **Reply length:** oMLX's default limit is 20,000 tokens per reply (`sampling.max_tokens` in `~/.omlx/settings.json`; edit only while oMLX is stopped).
 - **Usage records:** Open WebUI sends each model request to the relay (its saved connection address was changed to the relay's port on 2026-10-12), with the user's name and id attached (`ENABLE_FORWARD_USER_INFO_HEADERS=true`). Tested with one message from the admin account: the row's token counts matched oMLX's own log. Not tested: a guest's temporary chat, Stop, and long replies through the relay.
+- **Default model:** new chats start on the Qwen model for everyone (`ui.default_models` in Open WebUI's saved settings, set 2026-10-12). Without it Open WebUI picks the first model alphabetically. A person's own chosen default overrides it. If the default model is ever removed, change this setting in Admin Panel, Settings, Models.
 - **Models:** every model oMLX offers is available to every approved user (`BYPASS_MODEL_ACCESS_CONTROL=true`).
 
 ## 11. Tool notes: what was found in documentation and source code

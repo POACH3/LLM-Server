@@ -35,6 +35,19 @@ Both programs listen only on the Mac itself. The only way in from another device
 
 The baseline works: the server runs, the owner and guests have chatted from their own devices, and guests' conversations are not saved. Usage is recorded per user (who, when, which model, how many tokens, how long; never the text). Still to come: a way for the owner to reserve the server, a queue, and a status display. See [SPEC.md](SPEC.md) for the plan.
 
+## Measured speed
+
+On a Mac Studio (M1 Max, 64GB), measured 2026-10-12 straight at the model server with a short prompt and 300-token replies. Averages of 15 runs per model with it loaded, and 5 swaps into each.
+
+| | Qwen3.6-35B-A3B, 4-bit | Laguna XS 2.1, 6-bit |
+| --- | --- | --- |
+| Tokens per second | 69.9 | 52.1 |
+| Time to first token, model loaded | 0.21 s | 0.25 s |
+| Time to first token when the other model must be swapped out first | 12.9 s (9.1 to 15.1) | 8.2 s |
+| Memory once loaded | 19.3GB | 25.7GB |
+
+The two models do not fit in memory together, so switching between them costs one swap. Through the chat page the first message of each chat is a few seconds slower. Long documents, several users at once and answer quality were not measured. More detail is in [OVERVIEW.md](OVERVIEW.md), section 8.
+
 ## Requirements
 
 - A Mac with Apple Silicon and enough memory for the model
