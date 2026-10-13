@@ -1,0 +1,61 @@
+#!/bin/zsh
+# Starts the private LLM server: oMLX (the model) and then Open WebUI (the
+# chat page). The port numbers come from local.env. Both run in the background on this Mac only and keep
+# running after this window is closed. Nothing here starts at login or
+# restarts by itself. Stop with the llm-stop command in this same folder.
+# The folder can be moved: the script works from wherever it is kept.
+DIR="${0:A:h}"
+cd "$DIR" || exit 1
+source "$DIR/load-local-env.zsh"
+
+listening() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
+
+wait_for() {  # port, seconds
+  local n=0
+  while ! listening "$1"; do
+    n=$((n + 1))
+    [ "$n" -ge "$2" ] && return 1
+    sleep 1
+  done
+}
+
+if listening "$OMLX_PORT"; then
+  echo "oMLX is already running."
+else
+  echo "Starting oMLX..."
+  nohup /opt/homebrew/bin/omlx serve --model-dir "$HOME/models" \
+    --host 127.0.0.1 --port "$OMLX_PORT" \
+    --api-key "$(cat ./omlx-api-key)" >> ./omlx.log 2>&1 &
+  disown
+  wait_for "$OMLX_PORT" 60 || { echo "oMLX did not start. See $DIR/omlx.log"; exit 1; }
+  echo "oMLX is up."
+fi
+
+if listening "$WEBUI_PORT"; then
+  echo "Open WebUI is already running."
+else
+  echo "Starting Open WebUI (can take up to a minute)..."
+  nohup ./start-open-webui.sh >> ./open-webui.log 2>&1 &
+  disown
+  wait_for "$WEBUI_PORT" 120 || { echo "Open WebUI did not start. See $DIR/open-webui.log"; exit 1; }
+  echo "Open WebUI is up."
+fi
+
+# Point the Tailscale address back at the chat page (llm-stop switches it to
+# the offline page), then end the small program that hands out that page.
+# If the switch fails, the offline page is left up so guests do not see a
+# bare error.
+TS=/usr/local/bin/tailscale
+switched=yes
+if [ -x "$TS" ]; then
+  if ! "$TS" serve --bg "$WEBUI_PORT" >/dev/null 2>&1; then
+    switched=no
+    echo "Could not point the Tailscale address at the chat page. Run: tailscale serve --bg $WEBUI_PORT"
+  fi
+fi
+if [ "$switched" = yes ]; then
+  offline_pids=($(lsof -nP -tiTCP:"$OFFLINE_PORT" -sTCP:LISTEN 2>/dev/null))
+  [ ${#offline_pids} -gt 0 ] && kill -INT $offline_pids 2>/dev/null
+fi
+
+echo "Ready: https://$TAILSCALE_HOST (or http://localhost:$WEBUI_PORT at this Mac)"

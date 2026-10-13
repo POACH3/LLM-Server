@@ -1,0 +1,58 @@
+#!/bin/zsh
+# Git pre-commit hook. Git runs this before every commit, whoever makes it,
+# and cancels the commit if this script exits with an error.
+#
+# It refuses a commit that would put a secret, private data or this Mac's
+# real Tailscale address into the repository.
+#
+# Turned on for this copy of the repository with:
+#   git config core.hooksPath git-hooks
+# To commit anyway in a genuine emergency: git commit --no-verify
+
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+cd "$root" || exit 0
+
+problems=()
+
+# 1. Files that must never be committed, by name.
+bad="$(git diff --cached --name-only --diff-filter=ACMR \
+  | grep -E '(^|/)(omlx-api-key|\.webui_secret_key|local\.env|CLAUDE\.local\.md)$|(^|/)open-webui-data/|\.(log|db|db-shm|db-wal|sqlite3|key|pem)$')"
+if [ -n "$bad" ]; then
+  problems+=("These files must not be committed:")
+  for f in ${(f)bad}; do problems+=("    $f"); done
+fi
+
+# Everything about to be committed, as text.
+staged="$(git diff --cached)"
+
+# 2. The secret values themselves, pasted into any file.
+for f in omlx-api-key .webui_secret_key; do
+  [ -s "$f" ] || continue
+  secret="$(head -n 1 "$f")"
+  [ ${#secret} -ge 16 ] || continue
+  if print -r -- "$staged" | grep -Fq -- "$secret"; then
+    problems+=("The contents of $f appear in the changes. Remove the value first.")
+  fi
+done
+
+# 3. This Mac's real Tailscale address, which belongs only in local.env.
+if [ -f local.env ]; then
+  host="$(sed -n 's/^TAILSCALE_HOST=//p' local.env | head -n 1 | tr -d '"')"
+  if [ ${#host} -ge 8 ] && print -r -- "$staged" | grep -Fq -- "$host"; then
+    problems+=("The real Tailscale address appears in the changes. Use \$TAILSCALE_HOST instead.")
+  fi
+  # The tailnet name on its own (the middle part of the address).
+  tailnet="${${host#*.}%.ts.net}"
+  if [ ${#tailnet} -ge 6 ] && [ "$tailnet" != "$host" ] \
+     && print -r -- "$staged" | grep -Fq -- "$tailnet"; then
+    problems+=("The real tailnet name appears in the changes. Use (tailnet name) instead.")
+  fi
+fi
+
+if [ ${#problems} -gt 0 ]; then
+  print -r -- "Commit cancelled by git-hooks/pre-commit:" >&2
+  for p in $problems; do print -r -- "  $p" >&2; done
+  print -r -- "Unstage or fix the items above, then commit again." >&2
+  exit 1
+fi
+exit 0

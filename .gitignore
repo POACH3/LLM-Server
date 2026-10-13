@@ -1,0 +1,45 @@
+# Secrets: never commit these.
+omlx-api-key
+.webui_secret_key
+*.key
+*.pem
+.env
+.env.*
+
+# Open WebUI's data: accounts, password hashes, saved chats, uploaded files,
+# and a plain-text copy of the oMLX key.
+open-webui-data/
+
+# Logs: device addresses and usage times; later, per-user usage records.
+*.log
+logs/
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# Model files are large and live outside this folder anyway.
+models/
+*.safetensors
+*.gguf
+
+# Python (for the relay, when it is written)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# macOS and editors
+.DS_Store
+.vscode/
+.idea/
+
+# Personal Claude Code overrides for this project
+.claude/settings.local.json
+
+# This Mac's real address and port numbers, and Claude Code's local notes.
+local.env
+CLAUDE.local.md
+
+# The dated log of decisions, steps and findings. Kept on this Mac only.
+LOGS.local.md

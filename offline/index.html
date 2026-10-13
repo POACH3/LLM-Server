@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<!-- Marker the script below looks for, to tell this page from the chat page. -->
+<meta name="llm-offline-page" content="1">
+<title>Server not running</title>
+<!-- Everything is in this one file: no fonts, images or scripts are loaded
+     from anywhere else. -->
+<style>
+  :root {
+    --bg-1: #f4f1ea; --bg-2: #e6ecf3; --card: #ffffffcc; --line: #0000001a;
+    --text: #1f2328; --muted: #5c6670; --accent: #c2410c; --accent-soft: #c2410c1f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-1: #15171c; --bg-2: #1c2230; --card: #22262ecc; --line: #ffffff1f;
+      --text: #eceef1; --muted: #9aa4b1; --accent: #fb923c; --accent-soft: #fb923c24;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px 16px;
+    font: 17px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--text);
+    background: linear-gradient(160deg, var(--bg-1), var(--bg-2)) fixed;
+  }
+  main {
+    width: 100%; max-width: 420px; text-align: center;
+    padding: 40px 28px 32px;
+    background: var(--card);
+    border: 1px solid var(--line); border-radius: 20px;
+    box-shadow: 0 12px 40px #00000014;
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  }
+  .status {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 12px; border-radius: 999px;
+    font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-soft);
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+  h1 { margin: 22px 0 6px; font-size: 28px; line-height: 1.2; font-weight: 650; letter-spacing: -.01em; }
+  .sorry { margin: 0; font-size: 20px; color: var(--muted); }
+  .note {
+    margin: 28px 0 0; padding-top: 20px; border-top: 1px solid var(--line);
+    font-size: 14px; color: var(--muted);
+  }
+</style>
+<!-- Without scripts, fall back to reloading the page every 30 seconds. -->
+<noscript><meta http-equiv="refresh" content="30"></noscript>
+</head>
+<body>
+  <main>
+    <div class="status"><span class="dot"></span>Offline</div>
+    <h1>Server not running.</h1>
+    <p class="sorry">sorry :/</p>
+    <p class="note">The chat will appear by itself when the server is back.</p>
+  </main>
+<script>
+  // Every 30 seconds, ask this same address what it is serving. While it is
+  // still this page, or nothing answers (the server is starting), stay put.
+  // Once something else answers, reload so the chat page appears.
+  setInterval(function () {
+    fetch(location.href, { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (t) {
+        if (t !== null && t.indexOf('name="llm-offline-page"') === -1) location.reload();
+      })
+      .catch(function () {});
+  }, 30000);
+</script>
+</body>
+</html>
