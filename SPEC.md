@@ -36,7 +36,7 @@ No check is needed at the start of each session. Run the probe again only after 
 2. **M1 measurements**, listed below.
 
 **Also open, not yet scheduled.**
-- Long-document timings at 10K, 50K and 100K tokens (section 8). The measurement a hardware decision depends on.
+- Long-document timings (section 8). The measurement a hardware decision depends on. First run done 2026-10-14 for Qwen3.6-35B-A3B: 109K tokens took 8.6 minutes before the first word, follow-ups about 2 s, peak memory 25GB (OVERVIEW.md section 8). Waiting on the owner: is that wait acceptable (Q4)? Recommended next: the same test with the FP16 oQ4 build, said to read prompts faster on M1 chips.
 - Thinking: the main cause of slow replies. Limit it or make it a per-chat choice.
 - Runaway replies: set top-k to the model's recommended 20 after reading the publisher's recommendations; a deliberate Stop test; later, cancel or time limit in the gatekeeper. The owner set this aside for now.
 - oMLX disk cache: examine what it holds; set a size cap or expiry.
@@ -97,7 +97,7 @@ Apple Mac Studio, M1 Max, 10-core CPU, 24-core GPU, 16-core Neural Engine, 64GB 
 - **Memory bandwidth** is about 400 GB/s (ESTIMATE from Apple's published figure for this chip). It sets generation speed.
 - **GPU memory**: macOS lets the GPU use roughly 45-48GB by default (ESTIMATE). It can be raised, for example `sudo sysctl iogpu.wired_limit_mb=57344` for about 56GB, leaving about 8GB for macOS. UNVERIFIED whether the setting persists across reboots; check, and if it does not, apply it at boot.
 - **Strength**: fast generation on ~30B MoE models (ESTIMATE 30-60 tokens/sec), low power for a server that is always available.
-- **Weakness**: prompt processing (prefill) is compute-bound and slow on this chip. A 100K-token first prompt may take minutes (ESTIMATE). Concurrent users share the same bandwidth and slow each other down.
+- **Weakness**: prompt processing (prefill) is compute-bound and slow on this chip. Measured 2026-10-14 with Qwen3.6-35B-A3B: a 109K-token first prompt took 8.6 minutes (single reading). Concurrent users share the same bandwidth and slow each other down.
 - **Upgrade logic**: if the long-document wait is the problem, the upgrade case is prefill compute, not memory capacity. An M2 Ultra is roughly 2-3x faster at prefill (ESTIMATE), and newer M5-generation chips more. Decide from measurements.
 - **Cheaper levers to try before buying hardware** (none cost money): cache reuse or slot save/restore so the slow first prompt happens once per document; 8-bit KV cache quantization; a lighter-attention model; chunked retrieval instead of one giant context; raising the GPU memory limit.
 - **Software upgrade path after the MVP** is milestones M2-M6 (section 7). Hardware upgrade is a separate, measurement-driven decision.
@@ -317,7 +317,7 @@ Findings so far are in OVERVIEW.md (section 11). Run each when the step that nee
 
 Goal: answer one question before any upgrade. Is the long-document wait on the M1 Max acceptable? All speed figures in this document are ESTIMATES until these tests are run.
 
-- [ ] Time to first token on 10K, 50K and 100K-token prompts, for each candidate model.
+- [ ] Time to first token on 10K, 50K and 100K-token prompts, for each candidate model. Partly done 2026-10-14 for Qwen3.6-35B-A3B (11K: 20 s, 87.5K: 6 min, 109K: 8.6 min; follow-ups 0.5 to 2.1 s); results in OVERVIEW.md section 8. Still to do: about 50K, and the other models.
 - [ ] Generation speed in tokens per second for the everyday and quality models, at short and long context.
 - [ ] Follow-up test: load a large document, ask a question, then two follow-ups; compare time to first token each time.
 - [ ] KV cache memory at 100K tokens for each model, at 16-bit and 8-bit, and whether the machine starts swapping.

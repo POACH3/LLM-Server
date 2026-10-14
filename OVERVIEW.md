@@ -213,6 +213,24 @@ Measured straight at oMLX, not through the chat page or the relay. Short prompt 
 - Not covered: long prompts, where time to first token is dominated by reading the prompt; the chat page, which adds its own hidden prompt of 3,300 to 4,500 tokens and so a few seconds to the first message of each chat; several people at once; and answer quality.
 - Laguna's earlier single reading of about 39 tokens per second was a first run straight after loading; these figures replace it.
 
+### Long-document test (2026-10-14)
+
+Tested here, Qwen3.6-35B-A3B 4-bit, through the relay as `agent-testing`, nobody else using the server (checked during the run). The text was Python's own standard-library source code, a stand-in for a codebase; each first prompt started with a unique line so no earlier cache could help. The question asked which file defines a named function; the follow-up asked the same about a different function, in the same conversation. Single readings, not averages.
+
+| Prompt size (tokens) | Wait for the first word | Reading speed | Follow-up: wait for the first word | Writing speed | Peak oMLX memory |
+| --- | --- | --- | --- | --- | --- |
+| 11,000 | 20 s | about 540 tokens/s | 0.5 s | 59 tokens/s | 23GB |
+| 87,500 | 6 min (359 s) | about 240 tokens/s | 1.7 s | 34 tokens/s | 25GB |
+| 109,400 | 8.6 min (518 s) | about 210 tokens/s | 2.1 s | 30 tokens/s | 25GB |
+
+- **The first read is the slow part, and it slows down as the text grows:** about 540 tokens per second at 11,000 tokens, about 210 at 109,000. A 100,000-token document costs roughly 8 minutes before the first word.
+- **Follow-ups are fast:** 0.5 to 2.1 s, because oMLX reused all but a few tokens of the prompt from its cache. This was tested only straight after the first question, not after other people's chats or a restart.
+- **Writing slows at long context:** from 59 tokens per second to about 30 at 109,000 tokens.
+- **Memory stayed modest:** at most 25GB for the oMLX process (20GB at rest), so a 100,000-token conversation fits easily on this Mac (memory sampled every 2 s).
+- **Answers:** 5 of 6 named the right file; the miss was the follow-up at 87,500 tokens. Too few to judge long-context accuracy.
+- **Not covered:** a size near 50,000 (the script aimed for 50,000 but sent 87,500); the Laguna model; the chat page, which adds 5 to 6.5 s and sends uploaded documents its own way; several people at once; prose documents rather than code.
+- **Disk cache:** `~/.omlx/cache` grew from 8GB to 16GB during the test.
+
 ## 9. Known issues and findings
 
 1. **Slow replies.** Three causes were found: the model thinks at length before answering (17 to 42 seconds), which is the main one; Open WebUI's hidden prompt costs 5 to 6.5 seconds on the first message of each chat, which you decided to leave as is (see below); and the first message after starting waits about 6 seconds for the model to load. Thinking and the first-use load are still to be looked at in M1.
@@ -281,6 +299,9 @@ Update this section whenever the setup changes.
 | `~/Documents/Code/llm-server/llm-reserve` | `llm-reserve on`, `off` or `status`: reserves the server for the owner, releases it, or shows free, in use or reserved |
 | `~/Documents/Code/llm-server/relay.py` | The relay on 127.0.0.1:$RELAY_PORT. Passes every request from Open WebUI on to oMLX, records one row per chat request, and while the server is reserved refuses chat requests from anyone whose role is not admin (they are recorded as "refused: reserved"). Started and stopped by `llm-start` and `llm-stop`. Uses the Mac's own `/usr/bin/python3`. For streamed replies it adds a standard flag asking oMLX to report token counts |
 | `~/Documents/Code/llm-server/llm-usage` | Summarizes `usage.csv` for the last 24 hours, the last 7 days and all time: per person, messages sent, tool steps (extra requests when the model uses a built-in tool), time the server was busy, prompt, reply and total tokens, replies stopped at the length cap, and requests refused while reserved; the same per person per model; then the 5 longest requests ever. Groups by account id and shows the latest name. Only reads the file. Uses the Mac's own `/usr/bin/python3`. Its totals were checked against `usage.csv` by a separate count (2026-10-14) |
+| `~/Documents/Code/llm-server/tests/long-document-test` | `tests/long-document-test [--rounds N] [--sizes …] MODEL:KIND …`, for example `--rounds 3 qwen:prose laguna:prose laguna:code`. For each model, kind of text (prose: The Count of Monte Cristo; code: this Mac's Python standard library) and size (default 10,000, 50,000 and 100,000 tokens, exact), sends one prompt through the relay as `agent-testing`, then a follow-up. The questions ask about two invented facts placed about a quarter and three quarters of the way in (in code the second lands at 62 to 83%). A tiny warm-up loads each model first, so a model switch is not timed. Prints and saves to `tests/results/` (not in git) the waits, reading and writing speed, peak oMLX memory, right answers and whether anyone else was using the server; no text. About 15 minutes per model and kind; adds several GB to oMLX's disk cache. Checked 2026-10-14: every size and kind lands exactly for both models when counted offline; the server's own count matched exactly for both models, prose and code, at 2,000 and 10,000 tokens, with all answers right. 50,000 and 100,000 are confirmed offline only, by the same method |
+| `~/Documents/Code/llm-server/tests/build-long-prompt.py` | Builds each prompt for that test, cut so the server's count (the message plus the model's chat format) is exact. Run with oMLX's Python. Counts the way oMLX does: loads each tokenizer through oMLX's own settings function (`get_tokenizer_config`), renders the chat to text, then turns it into tokens with the tokenizer's defaults. Both matter for Laguna: its tokenizer file needs a correction oMLX applies, and the default adds a second start-of-text token (one more than a plain count). Reads only local files |
+| `~/Documents/Code/llm-server/tests/texts/` | The prose text, downloaded once from Project Gutenberg (ebook 1184). Not in git |
 | `~/Documents/Code/llm-server/usage.csv` | The usage records: time, user name, user id, model, prompt tokens, reply tokens, seconds, how it ended. No text. Not in git; readable only by this Mac account. Opens in a text editor or spreadsheet |
 | `~/Documents/Code/llm-server/start-open-webui.sh` | Loads the settings and key, runs Open WebUI in the foreground (used by `llm-start`) |
 | `~/Documents/Code/llm-server/SPEC.md`, `OVERVIEW.md`, `CLAUDE.md` | The project documents, and the summary Claude Code reads at the start of a session |
@@ -322,7 +343,7 @@ About the pre-commit check:
 | Hook: `protect-claude-config.sh` | Blocks a shell command that would change the settings files, the hooks or the rules. Registered on 2026-10-12 and confirmed live the same day in a new chat (one probe command was blocked as intended) |
 | Hook: `check-shell-syntax.sh` | After Claude edits a script, checks that it still parses |
 | Rules (five files) | Written instructions: secrets and private data; working with you; the two documents; scripts and code; Claude's own configuration |
-| Skills (three) | Saved procedures: server status, recording a change, changing a setting |
+| Skills (four) | Saved procedures: server status, recording a change, changing a setting, help when a git push fails to sign in |
 
 When a permission needs changing, Claude gives you the text and you paste it into `.claude/settings.json`; Claude then reads it back.
 
@@ -490,6 +511,7 @@ Moved from the spec, which now keeps a short version of this table.
 ## 12. Cautions and lessons
 
 - A secret-blocking check runs before every git commit (`git-hooks/pre-commit`). If a commit is cancelled, read its message; do not reach for `--no-verify`. In a fresh copy of the repository it is off until `git config core.hooksPath git-hooks` is run.
+- `git push` from a remote (SSH) session fails with "failed to get: -25308" because the Mac's keychain is locked. Run `security unlock-keychain ~/Library/Keychains/login.keychain-db` in that terminal, type the Mac password, then push. The `git-push-help` skill has the details.
 - Hooks and permissions in `.claude/` limit Claude only. They never check what you do in Terminal; the git hook is what covers your commits.
 
 - oMLX does NOT save `--api-key` to its settings; a plain `omlx serve` runs with no key. Always start with `llm-start`.

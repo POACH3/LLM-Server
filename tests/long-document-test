@@ -1,0 +1,283 @@
+#!/usr/bin/python3
+# Long-document timing test (SPEC.md section 8). For each model, kind of text
+# and size, sends one long prompt through the relay as agent-testing, then a
+# follow-up question in the same conversation, and reports how long each
+# took and whether the answers were right.
+#
+#   tests/long-document-test [--rounds N] [--sizes 10000,50000,100000] MODEL:KIND ...
+#
+#   MODEL  part of a model's name as oMLX offers it, e.g. "qwen"; must match
+#          exactly one model.
+#   KIND   "prose" (The Count of Monte Cristo) or "code" (this Mac's Python
+#          standard library source).
+#
+#   Example: tests/long-document-test --rounds 3 qwen:prose laguna:prose laguna:code
+#
+# Prompt sizes are exact: the count the server reports, including the
+# model's chat format, worked out beforehand with each model's tokenizer
+# loaded the way oMLX loads it (tests/build-long-prompt.py, run with oMLX's
+# Python). Each prompt starts
+# with a unique line, so no earlier cache can shorten the first read. The
+# questions ask about two invented facts placed about a quarter and three
+# quarters of the way in, which no model can know without reading.
+#
+# Before each model's first prompt, a tiny warm-up request loads the model,
+# so a model switch is not counted in the first wait.
+#
+# Needs the server running (./llm-start) and the prose text downloaded once:
+#   curl -L -o tests/texts/count-of-monte-cristo.txt https://www.gutenberg.org/cache/epub/1184/pg1184.txt
+#
+# The server is busy for the whole run (about 15 minutes per model and kind
+# at the default sizes on an M1 Max), so guests' replies are slow meanwhile;
+# the "Others" column says if anyone else was using it. Requests appear in
+# usage.csv as agent-testing. oMLX keeps the processed prompts in its disk
+# cache (~/.omlx/cache), which grows by several GB per run.
+#
+# Results (timings and counts only, never text) are printed and also saved
+# to tests/results/ as a CSV file. Nothing else is changed.
+
+import argparse
+import csv
+import http.client
+import json
+import os
+import subprocess
+import sys
+import sysconfig
+import threading
+import time
+import uuid
+from datetime import datetime
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+PROJECT = os.path.dirname(HERE)
+PROSE_FILE = os.path.join(HERE, "texts", "count-of-monte-cristo.txt")
+CODE_DIR = sysconfig.get_paths()["stdlib"]
+BUILDER = os.path.join(HERE, "build-long-prompt.py")
+MODELS_DIR = os.path.expanduser("~/models")
+MAX_TOKENS = 1500      # room for the model's thinking plus a short answer
+TIMEOUT = 1800         # seconds; a 100K-token first read took about 9 minutes
+
+
+def local_values():
+    # local.env is simple NAME=value lines (see local.env.example).
+    values = {}
+    with open(os.path.join(PROJECT, "local.env")) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                name, value = line.split("=", 1)
+                values[name.replace("export ", "").strip()] = value.strip().strip("'\"")
+    return values
+
+
+def omlx_python():
+    # oMLX's own Python, which has the tokenizers library.
+    prefix = subprocess.run(["brew", "--prefix", "omlx"], capture_output=True,
+                            text=True).stdout.strip()
+    path = os.path.join(prefix, "libexec", "bin", "python")
+    if not os.path.exists(path):
+        sys.exit("Cannot find oMLX's Python at %s." % path)
+    return path
+
+
+parser = argparse.ArgumentParser(description="Long-document timing test.")
+parser.add_argument("--rounds", type=int, default=1)
+parser.add_argument("--sizes", default="10000,50000,100000")
+parser.add_argument("sets", nargs="+", metavar="MODEL:KIND")
+args = parser.parse_args()
+sizes = [int(s) for s in args.sizes.split(",")]
+sets = []
+for s in args.sets:
+    model_match, _, kind = s.partition(":")
+    if kind not in ("prose", "code"):
+        sys.exit("%r: give MODEL:prose or MODEL:code." % s)
+    sets.append((model_match, kind))
+if any(k == "prose" for _, k in sets) and not os.path.exists(PROSE_FILE):
+    sys.exit("Missing %s; see the download line at the top of this script." % PROSE_FILE)
+
+env = local_values()
+RELAY_PORT, OMLX_PORT = int(env["RELAY_PORT"]), env["OMLX_PORT"]
+PYTHON = omlx_python()
+with open(os.path.join(PROJECT, "omlx-api-key")) as f:
+    HEADERS = {"Authorization": "Bearer " + f.read().strip(),
+               "Content-Type": "application/json",
+               # Recorded by the relay as agent-testing, an ordinary user.
+               "X-OpenWebUI-User-Name": "agent-testing",
+               "X-OpenWebUI-User-Id": "agent-testing",
+               "X-OpenWebUI-User-Role": "user"}
+
+
+def get(path):
+    c = http.client.HTTPConnection("127.0.0.1", RELAY_PORT, timeout=30)
+    c.request("GET", path, headers=HEADERS)
+    return json.loads(c.getresponse().read())
+
+
+def resolve(model_match):
+    offered = [m["id"] for m in get("/v1/models")["data"]]
+    matches = [m for m in offered if model_match.lower() in m.lower()]
+    if len(matches) != 1:
+        sys.exit("%r matches %s. Models offered: %s"
+                 % (model_match, matches or "none", ", ".join(offered)))
+    if not os.path.exists(os.path.join(MODELS_DIR, matches[0], "tokenizer.json")):
+        sys.exit("No tokenizer.json in %s." % os.path.join(MODELS_DIR, matches[0]))
+    return matches[0]
+
+
+def builder(*argv):
+    out = subprocess.run([PYTHON, "-I", BUILDER] + list(argv), capture_output=True, text=True)
+    if out.returncode:
+        sys.exit("Building the prompt failed: %s" % out.stderr.strip()[-500:])
+    return out.stdout
+
+
+# --- Measuring ----------------------------------------------------------
+
+def omlx_pid():
+    out = subprocess.run(["lsof", "-nP", "-iTCP:%s" % OMLX_PORT, "-sTCP:LISTEN", "-t"],
+                         capture_output=True, text=True).stdout.split()
+    return out[0] if out else None
+
+
+def footprint_gb(pid):
+    # The process's real footprint, including the model's GPU memory, which
+    # ps does not show.
+    out = subprocess.run(["/usr/bin/footprint", "-p", pid], capture_output=True, text=True).stdout
+    for line in out.splitlines():
+        if "phys_footprint:" in line:
+            value, unit = line.split("phys_footprint:")[1].split()[:2]
+            return float(value) * {"GB": 1, "MB": 1 / 1024, "KB": 1 / 1048576}.get(unit, 1)
+    return 0.0
+
+
+class Watcher(threading.Thread):
+    # Every 2 seconds: oMLX's memory, and how many chat requests the relay is
+    # handling (more than 1 means someone else was using the server).
+    def __init__(self, pid):
+        super().__init__(daemon=True)
+        self.pid, self.done, self.peak_gb, self.most_requests = pid, False, 0.0, 0
+
+    def run(self):
+        while not self.done:
+            if self.pid:
+                self.peak_gb = max(self.peak_gb, footprint_gb(self.pid))
+            try:
+                self.most_requests = max(self.most_requests,
+                                         get("/relay/status").get("requests_in_progress", 0))
+            except Exception:
+                pass
+            time.sleep(2)
+
+
+def ask(model, messages, max_tokens=MAX_TOKENS):
+    body = json.dumps({"model": model, "messages": messages, "stream": True,
+                       "max_tokens": max_tokens})
+    c = http.client.HTTPConnection("127.0.0.1", RELAY_PORT, timeout=TIMEOUT)
+    start = time.time()
+    c.request("POST", "/v1/chat/completions", body=body, headers=HEADERS)
+    reply = c.getresponse()
+    if reply.status != 200:
+        sys.exit("The server answered %d: %s" % (reply.status, reply.read()[:300]))
+    first, content, usage, ended = None, [], {}, None
+    for raw in reply:
+        line = raw.decode("utf-8", "replace").strip()
+        if not line.startswith("data:") or line == "data: [DONE]":
+            continue
+        event = json.loads(line[5:])
+        usage = event.get("usage") or usage
+        for choice in event.get("choices") or []:
+            delta = choice.get("delta") or {}
+            # The first word counts whether it is thinking or answer.
+            if first is None and (delta.get("content") or delta.get("reasoning_content")
+                                  or delta.get("reasoning")):
+                first = time.time()
+            content.append(delta.get("content") or "")
+            ended = choice.get("finish_reason") or ended
+    end = time.time()
+    written = usage.get("completion_tokens") or 0
+    return {"wait": first - start if first else None,
+            "prompt_tokens": usage.get("prompt_tokens") or 0, "reply_tokens": written,
+            "cached_tokens": (usage.get("prompt_tokens_details") or {}).get("cached_tokens"),
+            "write_speed": written / (end - first) if first and end > first else None,
+            "ended": ended, "answer": "".join(content)}
+
+
+def warm_up(model):
+    # A tiny request, so loading the model is not counted in the first wait.
+    ask(model, [{"role": "user", "content": "Reply with the single word OK."}], max_tokens=200)
+
+
+# --- Run ----------------------------------------------------------------
+
+os.makedirs(os.path.join(HERE, "results"), exist_ok=True)
+results_path = os.path.join(HERE, "results", datetime.now().strftime("%Y-%m-%d-%H%M") + ".csv")
+COLUMNS = ["round", "model", "kind", "target_tokens", "prompt_tokens", "first_wait_s",
+           "read_speed_tps", "follow_up_wait_s", "follow_up_cached_tokens", "write_speed_tps",
+           "peak_memory_gb", "first_right", "follow_up_right", "others_using", "ended"]
+with open(results_path, "w", newline="") as f:
+    csv.writer(f).writerow(COLUMNS)
+
+pid = omlx_pid()
+rows = []
+fmt = "%-6s %-22s %-6s %-8s %-11s %-11s %-10s %-10s %-9s %-6s %s"
+print(fmt % ("Round", "Model", "Kind", "Tokens", "First wait", "Read speed",
+             "Follow-up", "Write", "Peak mem", "Right", "Others"), flush=True)
+for rnd in range(1, args.rounds + 1):
+    loaded = None
+    for model_match, kind in sets:
+        model = resolve(model_match)
+        if model != loaded:
+            warm_up(model)
+            loaded = model
+        for size in sizes:
+            built = json.loads(builder("build", os.path.join(MODELS_DIR, model), kind,
+                                       str(size), str(uuid.uuid4()),
+                                       PROSE_FILE, CODE_DIR))
+            watcher = Watcher(pid)
+            watcher.start()
+            a = ask(model, [{"role": "user", "content": built["prompt"]}])
+            b = ask(model, [{"role": "user", "content": built["prompt"]},
+                            {"role": "assistant", "content": a["answer"]},
+                            {"role": "user", "content": built["follow_up"]}])
+            watcher.done = True
+            watcher.join()
+            row = {"round": rnd, "model": model, "kind": kind, "target_tokens": size,
+                   "prompt_tokens": a["prompt_tokens"],
+                   "first_wait_s": round(a["wait"], 2) if a["wait"] else "",
+                   "read_speed_tps": round(a["prompt_tokens"] / a["wait"]) if a["wait"] else "",
+                   "follow_up_wait_s": round(b["wait"], 2) if b["wait"] else "",
+                   "follow_up_cached_tokens": b["cached_tokens"],
+                   "write_speed_tps": round(a["write_speed"], 1) if a["write_speed"] else "",
+                   "peak_memory_gb": round(watcher.peak_gb, 1),
+                   "first_right": built["answer"].lower() in a["answer"].lower(),
+                   "follow_up_right": built["follow_up_answer"].lower() in b["answer"].lower(),
+                   "others_using": watcher.most_requests > 1,
+                   "ended": "%s/%s" % (a["ended"], b["ended"])}
+            rows.append(row)
+            with open(results_path, "a", newline="") as f:
+                csv.writer(f).writerow([row[c] for c in COLUMNS])
+            print(fmt % (rnd, model[:22], kind, format(row["prompt_tokens"], ","),
+                         "%s s" % row["first_wait_s"], "%s tok/s" % row["read_speed_tps"],
+                         "%s s" % row["follow_up_wait_s"], "%s tok/s" % row["write_speed_tps"],
+                         "%s GB" % row["peak_memory_gb"],
+                         "%d/2" % (row["first_right"] + row["follow_up_right"]),
+                         "yes" if row["others_using"] else "no"), flush=True)
+
+# Averages over the rounds, with the lowest and highest first wait.
+print("\nAverages over %d round(s)" % args.rounds)
+groups = {}
+for r in rows:
+    groups.setdefault((r["model"], r["kind"], r["target_tokens"]), []).append(r)
+for (model, kind, size), rs in groups.items():
+    waits = [r["first_wait_s"] for r in rs if r["first_wait_s"] != ""]
+    follow = [r["follow_up_wait_s"] for r in rs if r["follow_up_wait_s"] != ""]
+    write = [r["write_speed_tps"] for r in rs if r["write_speed_tps"] != ""]
+    right = sum(r["first_right"] + r["follow_up_right"] for r in rs)
+    if waits:
+        print("  %-22s %-6s %7s tokens: first wait %.1f s (%.1f to %.1f), follow-up %.1f s, "
+              "write %.1f tok/s, right %d of %d%s" % (
+                  model[:22], kind, format(size, ","), sum(waits) / len(waits), min(waits),
+                  max(waits), sum(follow) / max(len(follow), 1), sum(write) / max(len(write), 1),
+                  right, 2 * len(rs), "; others using in some" if any(r["others_using"] for r in rs) else ""))
+print("Saved to %s" % os.path.relpath(results_path, PROJECT))

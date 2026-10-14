@@ -46,3 +46,9 @@ CLAUDE.local.md
 
 # The dated log of decisions, steps and findings. Kept on this Mac only.
 LOGS.local.md
+
+# Texts the long-document test downloads; public domain, large, re-fetchable.
+tests/texts/
+# Results of the long-document test (timings and counts only).
+# Kept local until the owner decides to publish them.
+tests/results/

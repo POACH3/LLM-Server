@@ -39,6 +39,9 @@ Starting and stopping affects the owner's guests. Ask before running either.
 | `open-webui-static/` | Open WebUI's page extras, which it empties and refills at every start | No |
 | `llm-reserve` | Reserve the server for the owner, release it, or show its state (zsh) | Yes |
 | `usage.csv` | The usage records the relay writes | No |
+| `llm-usage` | Summarizes `usage.csv` per person and per model | Yes |
+| `tests/long-document-test`, `tests/build-long-prompt.py` | Times models on long prompts of exact sizes (prose or code) through the relay as `agent-testing`; busies the server for about 15 minutes per model and kind | Yes |
+| `tests/texts/`, `tests/results/` | The downloaded prose text, and the test's saved results | No |
 | `open-webui.env` | Open WebUI settings, commented, no secrets | Yes |
 | `offline/index.html`, `offline-page.py` | The page shown at the Tailscale address while stopped, and the small program that hands it out (started by `llm-stop`, ended by `llm-start`) | Yes |
 | `offline-message.txt` | Plain text shown instead if the offline page program fails to start | Yes |
@@ -80,6 +83,6 @@ The full rules are in `.claude/rules/`. The ones most likely to be broken by acc
 - `git-hooks/pre-commit`: a git hook, not a Claude one. Git runs it before every commit, whoever makes it, and cancels a commit that includes a secret file, the database, a log, `local.env`, the key's value, or the real Tailscale address. Switched on with `git config core.hooksPath git-hooks`.
 - `.claude/hooks/check-shell-syntax.sh`: after a script is edited, checks that it still parses.
 - `.claude/hooks/protect-claude-config.sh`: blocks shell commands that would change the settings files, the hooks or the rules.
-- `.claude/skills/`: `server-status`, `record-change`, `change-setting`.
+- `.claude/skills/`: `server-status`, `record-change`, `change-setting`, `git-push-help`.
 - `.claude/rules/`: secrets, working with the owner, documentation, scripts and code, Claude's own configuration.
 - `.claude/output-styles/one-step.md`: an optional reply style matching how the owner likes to work. Not switched on by default.
