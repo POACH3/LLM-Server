@@ -165,6 +165,7 @@ A check runs before every commit to enforce this. `git-hooks/pre-commit` cancels
 - Prompts and replies never leave the Mac. Open WebUI runs in offline mode, with update checks and outside services switched off.
 - Guests' conversations are not saved. The admin's own are, unless a chat is set to temporary.
 - Logs and usage records hold who, when, timings and token counts, never the text of a conversation.
+- oMLX keeps the model's processed form of recent prompts on disk, so long documents need not be read again. It holds no text, is limited to 50GB, and anything older than 7 days is deleted when the server is stopped.
 - To produce an answer, the Mac has to see the prompt and reply while the request runs. Whoever operates the Mac is trusted not to record them.
 
 More detail is in [OVERVIEW.md](OVERVIEW.md), section 5.

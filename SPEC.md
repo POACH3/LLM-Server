@@ -38,9 +38,9 @@ No check is needed at the start of each session. Run the probe again only after 
 **Also open, not yet scheduled.**
 - Long-document timings (section 8). The measurement a hardware decision depends on. First run done 2026-10-14 for Qwen3.6-35B-A3B: 109K tokens took 8.6 minutes before the first word, follow-ups about 2 s, peak memory 25GB (OVERVIEW.md section 8). Waiting on the owner: is that wait acceptable (Q4)? Recommended next: the same test with the FP16 oQ4 build, said to read prompts faster on M1 chips.
 - Thinking: the main cause of slow replies. Limit it or make it a per-chat choice.
-- Runaway replies: set top-k to the model's recommended 20 after reading the publisher's recommendations; a deliberate Stop test; later, cancel or time limit in the gatekeeper. The owner set this aside for now.
-- oMLX disk cache: examine what it holds; set a size cap or expiry.
-- Warm-up request in `llm-start`.
+- Runaway replies: publishers' sampling values set per model 2026-10-14 (top-k 20 for both; presence penalty 1.5 for Qwen), which made one test question's runaway rarer but not gone (OVERVIEW.md section 9). The owner set aside the rest on 2026-10-14: a deliberate Stop test; trying oMLX's per-model thinking budget (best measured with the performance run); later, cancel or time limit in the gatekeeper.
+- oMLX disk cache: done 2026-10-14. Examined (derived working state, no text); the owner chose a 50GB limit and a 7-day expiry run by `llm-stop` (OVERVIEW.md section 9).
+- Warm-up request in `llm-start`: built 2026-10-14 (loads Open WebUI's default model before the address points back at the chat page). Confirmed at a real start the same day.
 - Research R10 for saved conversations private from the admin, then the owner decides how strong that guarantee must be.
 - `README.md`'s "Setup on a new machine" section is an untested sketch.
 
@@ -292,9 +292,9 @@ The owner wants to know which models each user uses, how many tokens they consum
 - [x] Friendly "offline" page (F11), styled, 2026-10-12.
 - [ ] ~~A permanent "nothing is saved" notice for guests~~ Skipped by the owner 2026-10-14.
 - [ ] Thinking: limit it or make it a per-chat choice (section 8).
-- [ ] Warm-up request in the start command so the first person does not wait for the model to load.
-- [ ] Runaway replies: set top-k to the model's recommended value; deliberate Stop test; cancel or time limit in the gatekeeper.
-- [ ] Decide a size cap or expiry for the oMLX disk cache after M1.
+- [x] Warm-up request in the start command so the first person does not wait for the model to load. Built 2026-10-14.
+- [ ] Runaway replies: ~~set top-k to the model's recommended value~~ (done 2026-10-14, per model); deliberate Stop test; thinking budget; cancel or time limit in the gatekeeper.
+- [x] Decide a size cap or expiry for the oMLX disk cache. 50GB and 7 days, 2026-10-14 (DECIDED).
 
 ### Research tasks
 
@@ -310,7 +310,7 @@ Findings so far are in OVERVIEW.md (section 11). Run each when the step that nee
 | R6 | macOS specifics: how to read per-process GPU and unified memory, and whether `iogpu.wired_limit_mb` persists across reboots. | Any GPU-limit change; M4 | Open. |
 | R7 | Verify candidate models exist, with sizes and quantizations. | Each new model | Done for the M0 model; repeat for each contender. |
 | R8 | Tailscale: sharing on the free plan, the user limit, direct versus relayed connections. | M0 | Done, except relayed-connection speed for guests away from home, not yet measured under load. |
-| R9 | Telemetry, update checks or phone-home behavior in oMLX (and any component added), and how to disable them. | Privacy | Partly done; oMLX update checks and its menu-bar app not yet checked. |
+| R9 | Telemetry, update checks or phone-home behavior in oMLX (and any component added), and how to disable them. | Privacy | Done for oMLX 2026-10-14: nothing goes out on its own. Its admin dashboard checks GitHub for updates when opened, and uploads benchmark results to omlx.ai when a benchmark is run there, so do not benchmark from the dashboard. Menu-bar app not installed, not checked. |
 | R10 | For F9: what Open WebUI's temporary chat stores and shows; front ends that keep chats in the browser or encrypt them per user while working with an OpenAI-compatible server; what oMLX's disk cache holds and how to cap, expire or disable it; what each component logs. | Saved conversations (F9) | Open. |
 
 ## 8. Proof-of-concept test plan
@@ -331,7 +331,7 @@ Goal: answer one question before any upgrade. Is the long-document wait on the M
 - [ ] **Speed reminders from the 2026-10-11 iPhone test (owner asked to come back to these):**
   - [ ] Thinking: measure reply time and answer quality with thinking on, limited and off; find how to switch it per chat (Open WebUI model parameters or an oMLX per-model setting) and choose the default.
   - [x] Hidden prompt: identified as Open WebUI's built-in tools (2026-10-12). Owner decided not to remove them. Follow-ups in the same chat already reuse the cache.
-  - [ ] First-use load: add a warm-up request to `llm-start` and confirm the first real message no longer waits for the model to load.
+  - [x] First-use load: warm-up added to `llm-start` 2026-10-14; at a real start it loaded Qwen in about 5 s before the chat page was reachable.
 - [ ] Concurrent requests from two users, and what the queue does to the owner's cached document.
 - [ ] Staying available: sleep stays disabled while the LLM is meant to be up; nothing starts by itself after a reboot or power loss (the owner runs `llm-start`); whether a raised GPU memory limit persists across reboots.
 
@@ -346,7 +346,7 @@ Record results in OVERVIEW.md (measurements and log) so later work uses measured
 - What first-prompt wait on a 100K-token document is acceptable? (Owner: not sure; decide after seeing real times.)
 - Should thinking be on by default, limited, or a per-chat choice?
 - How strong must the guarantee be that the admin cannot read saved chats: technically impossible, or switched off on trust? (Owner: decide after research R10.)
-- Does the oMLX disk cache count as "saved data" for the transparency requirement, and what lifetime should it have?
+- Does the oMLX disk cache count as "saved data" for the transparency requirement, and what lifetime should it have? (Lifetime answered 2026-10-14: at most 7 days, 50GB. It is treated as derived saved data, listed in OVERVIEW.md section 5.)
 - Where do the F10 indicators live: inside Open WebUI or on a separate status page?
 - How does the gatekeeper identify the user behind each request? (Answered 2026-10-12: Open WebUI's user-info headers, tested and switched on. Still open: whether to use the signed form.)
 - Custom relay or LiteLLM? Answered 2026-10-12: custom (`relay.py`).

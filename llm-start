@@ -79,6 +79,43 @@ if [ -d ./open-webui-static ]; then
   ) || echo "Could not remove the Open WebUI branding from the chat page."
 fi
 
+# Warm-up: oMLX loads a model only when the first request for it arrives
+# (6 to 8 s). Send one tiny request now, before the address points back at
+# the chat page, so the first person does not wait for that. The model is the
+# one new chats start on (Open WebUI's saved ui.default_models, read-only;
+# the first if several); nothing is warmed if none is set or oMLX does not
+# offer it. Sent straight to oMLX, so it is not in usage.csv. A failure only
+# prints a note; the server still starts.
+echo "Loading the default model..."
+/usr/bin/python3 - "$OMLX_PORT" <<'EOF' || echo "Warm-up skipped; the first message will wait for the model to load."
+import http.client, json, sqlite3, sys, time
+port = int(sys.argv[1])
+try:
+    db = sqlite3.connect("file:open-webui-data/webui.db?mode=ro", uri=True)
+    row = db.execute("select value from config where key = 'ui.default_models'").fetchone()
+    model = (json.loads(row[0]) if row else "").split(",")[0].strip()
+except Exception:
+    model = ""
+if not model:
+    sys.exit("No default model is set in Open WebUI.")
+headers = {"Authorization": "Bearer " + open("omlx-api-key").read().strip(),
+           "Content-Type": "application/json"}
+c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+c.request("GET", "/v1/models", headers=headers)
+if model not in [m["id"] for m in json.loads(c.getresponse().read())["data"]]:
+    sys.exit("oMLX does not offer the default model %s." % model)
+start = time.time()
+c = http.client.HTTPConnection("127.0.0.1", port, timeout=180)
+c.request("POST", "/v1/chat/completions", headers=headers, body=json.dumps(
+    {"model": model, "messages": [{"role": "user", "content": "Reply with OK."}],
+     "max_tokens": 1}))
+reply = c.getresponse()
+reply.read()
+if reply.status != 200:
+    sys.exit("oMLX answered %d." % reply.status)
+print("%s is loaded (%.0f s)." % (model, time.time() - start))
+EOF
+
 # Point the Tailscale address back at the chat page (llm-stop switches it to
 # the offline page), then end the small program that hands out that page.
 # If the switch fails, the offline page is left up so guests do not see a

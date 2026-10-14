@@ -65,4 +65,24 @@ fi
 
 stop_port "Open WebUI" "$WEBUI_PORT"
 stop_port "Relay" "$RELAY_PORT"
-stop_port "oMLX" "$OMLX_PORT"
+stop_port "oMLX" "$OMLX_PORT" || exit 1
+
+# Expire oMLX's disk cache of processed prompts: delete what was written more
+# than 7 days ago (the owner's choice, 2026-10-14; with a 50GB size cap set in
+# oMLX). It holds no readable text but is derived from everyone's prompts.
+# Only done here, with oMLX stopped, so it never deletes under a running
+# server; nothing runs by itself. A long document older than that is simply
+# read again. The folder is oMLX's ssd_cache_dir setting, or its default.
+CACHE_DIR="$(/usr/bin/python3 -c '
+import json, os
+s = json.load(open(os.path.expanduser("~/.omlx/settings.json")))
+print(s.get("cache", {}).get("ssd_cache_dir") or os.path.expanduser("~/.omlx/cache"))
+' 2>/dev/null)"
+if [ -n "$CACHE_DIR" ] && [ -d "$CACHE_DIR" ]; then
+  old=($(find "$CACHE_DIR" -type f -name '*.safetensors' -mmin +10080 2>/dev/null))
+  if [ ${#old} -gt 0 ]; then
+    size="$(du -ch $old 2>/dev/null | tail -1 | cut -f1)"
+    # Files only; oMLX's folders are left in place.
+    rm -f $old && echo "Cleared ${#old} cache files older than 7 days ($size)."
+  fi
+fi
