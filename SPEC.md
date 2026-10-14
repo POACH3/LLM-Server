@@ -32,7 +32,7 @@ No check is needed at the start of each session. Run the probe again only after 
 - **Relay (F12, M2a; F4, M2b).** `relay.py` records usage to `usage.csv`; `llm-usage` summarizes it per person and per model (messages, time, tokens, length-cap hits, refusals) for the last 24 hours, 7 days and all time, plus the longest requests. The owner reserves with `./llm-reserve` or the badge in the chat page. The owner closed the relay as done on 2026-10-14 with these untested: a guest's temporary chat, Stop and a long reply through the relay, and the owner's own test of the badge switch in a browser.- **Permanent guest notice:** skipped by the owner on 2026-10-14.
 
 **What the owner wants next.**
-1. **Remove "Open WebUI" branding.** Waiting on the owner for a name, and a logo if wanted. Needs a re-runnable patch script (section 10).
+1. **Remove "Open WebUI" branding.** Owner's choice 2026-10-14: no replacement name; the tab reads "Private LLM" with the OI icon kept; every other logo and icon removed. Built and applied the same day without touching installed files (`chat-page/branding.js`, `custom.css`, `blank.png`, copied in by `llm-start`). **Unfinished:** the owner still saw "Open WebUI" in several places, possibly the browser's saved copy; set aside by the owner. Next: the owner checks in a private window and names each place and its wording.
 2. **M1 measurements**, listed below.
 
 **Also open, not yet scheduled.**
@@ -360,7 +360,7 @@ Each has a trigger for revisiting. Research notes behind these (Funnel, VPS rela
 | Idea | Status | Revisit when |
 | --- | --- | --- |
 | "Reserved" message on the offline page (F11) | Styled offline page built 2026-10-12 | With reserve and status (M2b): a distinct message when the owner has reserved the machine. Note: the offline page sits in front of the chat page, so the gatekeeper, which sits behind it, cannot own it. |
-| Remove "Open WebUI" branding | Wanted 2026-10-12; waiting on the owner for a name (and logo, if any) | Open WebUI appends "(Open WebUI)" to any custom name in code, and the logo, tab title and icons are in its installed files, so this needs a small re-runnable patch script applied after each upgrade. Allowed by its license at 50 users or fewer. |
+| Remove "Open WebUI" branding | Applied 2026-10-14, not yet confirmed in a browser; set aside by the owner | Done through the page-extras folder instead of patching installed files, so upgrades cannot break it. Allowed by its license at 50 users or fewer. Revisit when the owner reports where the name still shows. Not covered: the name a phone uses for a home-screen shortcut (served by Open WebUI itself). |
 | Private accounts and chat history (F9) | Moved up: wanted next after the MVP | After M1. Needs a storage decision, including whether the owner as admin can read guests' chats. |
 | Two resident models | Open | After swap times are measured. Needs a raised GPU limit and a pair that leaves room for a 100K-token cache. |
 | Guest lane on a second port | Deferred | Traffic grows, or guests keep evicting the owner's cache. A small model with capped context, so guests never evict the owner's document. |

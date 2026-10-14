@@ -130,6 +130,7 @@ To add a guest: share the Mac with them in Tailscale's admin console, have them 
 | `start-open-webui.sh` | Loads the settings and launches Open WebUI |
 | `relay.py` | Sits between Open WebUI and oMLX. Records usage per request in `usage.csv`, and refuses guests' requests while the owner has reserved the server |
 | `chat-page/loader.js` | The status badge added to the chat page (free, in use, reserved) |
+| `chat-page/branding.js`, `custom.css`, `blank.png` | Remove Open WebUI's name and logos from the page, without changing its installed files |
 | `llm-reserve` | The owner's command to reserve the server, release it, or see its state |
 | `llm-usage` | Summarizes the usage records: per person and per model, for the last day, week and all time |
 | `tests/long-document-test`, `tests/build-long-prompt.py` | Times models on long prompts of exact sizes, prose or code (first question and a follow-up), through the relay |

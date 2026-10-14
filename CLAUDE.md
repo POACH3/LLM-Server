@@ -36,6 +36,7 @@ Starting and stopping affects the owner's guests. Ask before running either.
 | `llm-start`, `llm-stop`, `start-open-webui.sh` | Start and stop scripts (zsh) | Yes |
 | `relay.py` | The relay between Open WebUI and oMLX: usage records and the owner's reservation (started and stopped with the rest) | Yes |
 | `chat-page/loader.js` | The status badge shown in the chat page; `llm-start` copies it into `open-webui-static/` after Open WebUI is up | Yes |
+| `chat-page/branding.js`, `custom.css`, `blank.png` | Remove Open WebUI's name and logos from the page (tab reads "Private LLM"); `llm-start` copies them in with the badge. Not yet confirmed working in a browser | Yes |
 | `open-webui-static/` | Open WebUI's page extras, which it empties and refills at every start | No |
 | `llm-reserve` | Reserve the server for the owner, release it, or show its state (zsh) | Yes |
 | `usage.csv` | The usage records the relay writes | No |
