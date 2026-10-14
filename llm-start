@@ -63,6 +63,20 @@ fi
 if [ -d ./open-webui-static ]; then
   cp ./chat-page/loader.js ./open-webui-static/loader.js \
     || echo "Could not add the status badge to the chat page."
+  # Remove Open WebUI's name and logos from the page (the owner's choice;
+  # allowed by its license at 50 people or fewer). The page text and tab
+  # title are handled by branding.js, added to the same loader.js; the logos
+  # inside the page are hidden by custom.css; the splash screen and the
+  # phone home-screen icons are replaced by a blank image. The tab icon
+  # (favicon.*) is kept.
+  (
+    cat ./chat-page/branding.js >> ./open-webui-static/loader.js &&
+    cp ./chat-page/custom.css ./open-webui-static/custom.css &&
+    for image in splash.png splash-dark.png logo.png apple-touch-icon.png \
+                 web-app-manifest-192x192.png web-app-manifest-512x512.png; do
+      cp ./chat-page/blank.png "./open-webui-static/$image" || exit 1
+    done
+  ) || echo "Could not remove the Open WebUI branding from the chat page."
 fi
 
 # Point the Tailscale address back at the chat page (llm-stop switches it to

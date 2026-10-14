@@ -1,0 +1,17 @@
+/* Hides the Open WebUI logo inside the chat page (the owner's choice,
+   2026-10-14; see branding.js). The tab icon is kept: it is a separate link
+   to the same file, and this only hides images in the page.
+
+   Open WebUI loads /static/custom.css on every page and ships it empty.
+   llm-start copies this file into place after Open WebUI has started. To
+   undo, remove the copy line in llm-start and restart. */
+
+/* The logo in the sidebar, on the sign-in page and elsewhere: all use the
+   tab icon's file. */
+img[src*="favicon.png"],
+img[src*="/static/logo.png"],
+img[src*="/static/splash"],
+/* The model's picture beside each reply, which defaults to the same logo. */
+img[src*="/models/model/profile/image"] {
+  visibility: hidden !important;
+}
