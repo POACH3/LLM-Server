@@ -16,7 +16,7 @@ browser -> Tailscale (https://$TAILSCALE_HOST) -> Open WebUI 127.0.0.1:$WEBUI_PO
 
 The real address and port numbers are in `local.env` (not in git), which every script reads, and are listed for you in `CLAUDE.local.md` (not in git). Tracked files use the placeholders `$TAILSCALE_HOST`, `$OMLX_PORT`, `$WEBUI_PORT`, `$OFFLINE_PORT` and `$RELAY_PORT`. Never write the real values into a tracked file.
 
-The relay (`relay.py`, the first slices of SPEC.md's gatekeeper) does two jobs. It records one row per chat request in `usage.csv`: who, when, which model, how many tokens, how long, never the text (F12, M2a). And it is where the owner reserves the server: while reserved, new chat requests from anyone but an admin are refused with a clear message (F4, M2b; switched with `./llm-reserve`). A badge in the chat page (`chat-page/loader.js`) shows everyone free, in use or reserved; it reads the relay's state through the address `/llm-status`. For an admin the badge is also the switch: a click goes to `/llm-reserve`, and the relay checks the sender's sign-in with Open WebUI before changing anything.
+The relay (`relay.py`, the first slices of SPEC.md's gatekeeper) does two jobs. It records one row per chat request in `usage.csv`: who, when, which model, how many tokens (and how many of them were thinking), how long, never the text (F12, M2a). And it is where the owner reserves the server: while reserved, new chat requests from anyone but an admin are refused with a clear message (F4, M2b; switched with `./llm-reserve`). A badge in the chat page (`chat-page/loader.js`) shows everyone free, in use or reserved; it reads the relay's state through the address `/llm-status`. For an admin the badge is also the switch: a click goes to `/llm-reserve`, and the relay checks the sender's sign-in with Open WebUI before changing anything.
 
 ## Commands
 
@@ -40,7 +40,7 @@ Starting and stopping affects the owner's guests. Ask before running either.
 | `open-webui-static/` | Open WebUI's page extras, which it empties and refills at every start | No |
 | `llm-reserve` | Reserve the server for the owner, release it, or show its state (zsh) | Yes |
 | `usage.csv` | The usage records the relay writes | No |
-| `llm-usage` | Summarizes `usage.csv` per person and per model | Yes |
+| `llm-usage` | Summarizes `usage.csv` per person and per model, including thinking tokens and how often each model's thinking cap (set in oMLX) is reached | Yes |
 | `tests/long-document-test`, `tests/build-long-prompt.py` | Times models on long prompts of exact sizes (prose or code) through the relay as `agent-testing`; busies the server for about 15 minutes per model and kind | Yes |
 | `tests/texts/`, `tests/results/` | The downloaded prose text, and the test's saved results | No |
 | `open-webui.env` | Open WebUI settings, commented, no secrets | Yes |

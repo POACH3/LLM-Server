@@ -1,7 +1,7 @@
 # Private LLM Server: Design Spec
 
 - **As of:** 2026-10-14 (first written 2026-09-30)
-- **Status:** M0 (baseline) is complete: the server runs and guests have used it. M1 (measure) has begun with two investigations. The relay is done (closed by the owner 2026-10-14): it records usage (M2a), summarized by `llm-usage`, and lets the owner reserve the server from the Mac or by clicking the badge in the chat page (M2b). The badge shows everyone free, in use or reserved.
+- **Status:** M0 (baseline) is complete: the server runs and guests have used it. The relay is done (M2a usage records, M2b reserving with the badge). M1 (measure) has begun: long-document timings for Qwen, and a test tool for exact-size runs. Per-model sampling, a cache limit, a warm-up at start and an oMLX privacy check were done on 2026-10-14. The owner has set aside the remaining items for now (see the handoff).
 - **What this file is:** how the owner wants this project built: goals, constraints, architecture, features and plans.
 - **Companion file:** [OVERVIEW.md](OVERVIEW.md) holds everything about what was actually done: decisions, what is installed and how it is configured, measurements, findings, and notes from each tool's documentation.
 - **Audience:** a Claude agent (or human) implementing or extending this project.
@@ -14,7 +14,7 @@
 
 **How the owner wants to work.** "Slow down. Take each thing one at a time. Be explicit." One step per message, then wait for the owner's go-ahead. Explain in plain language; the owner asks for simpler wording when an explanation is too technical. In a Claude Code session on the Mac the assistant runs commands itself; anything needing a password, an account, a system approval or a browser sign-in is done by the owner. Never print or ask for passwords or the API key. Decisions that are the owner's go through a short multiple-choice question.
 
-**Where we are (updated 2026-10-14).** M0 is done, and so are M2a and M2b. Nothing is half-finished on the Mac. Whether the server is running changes often; check with the `server-status` skill rather than trusting this file.
+**Where we are (updated 2026-10-14, end of the second long working session).** Nothing is half-finished on the Mac except the branding check below. Whether the server is running changes often; check with the `server-status` skill rather than trusting this file. The owner has asked to pause the larger items; ask what they want next rather than starting one.
 
 **Guard hook: confirmed live 2026-10-12.** `.claude/hooks/protect-claude-config.sh` blocks shell commands that would change Claude's settings, hooks or rules. It was checked at the start of a new session with this harmless command, which only prints text, and the command was blocked as intended:
 
@@ -24,25 +24,31 @@ echo "probe only, changes nothing: cp .claude/settings.json"
 
 No check is needed at the start of each session. Run the probe again only after the hook or its registration in `.claude/settings.json` has changed, in a session started after the change, because hooks load when a session starts. If it is not blocked then, tell the owner and give them corrected text to paste into `.claude/settings.json`; never edit that file yourself. Record the result in the OVERVIEW.md log.
 
-**State of the repository.** This folder (`~/Documents/Code/llm-server`) is a git repository. The owner made four commits on 2026-10-12 and pushed them to GitHub (`origin`). The GitHub repository is **public**, by the owner's choice (2026-10-14): treat every tracked file and commit as published. `git commit` and `git push` are denied to Claude in `.claude/settings.json`: the owner makes commits. If the owner asks for help preparing one, show the exact list of files and stop. A secret-blocking check, `git-hooks/pre-commit`, runs before every commit, whoever makes it, and cancels one that includes a secret file, private data, a secret's value, or the real Tailscale address; it is switched on by `git config core.hooksPath git-hooks`, which `git config core.hooksPath` should confirm (it does as of 2026-10-14). Whether it was on for those four commits was not confirmed. Secrets, the database, logs, `local.env` and `CLAUDE.local.md` are in this folder but ignored by git.
+**State of the repository.** This folder (`~/Documents/Code/llm-server`) is a git repository. The owner commits and pushes to GitHub (`origin`); as of 2026-10-14 there are 10 commits, all pushed. The GitHub repository is **public**, by the owner's choice (2026-10-14): treat every tracked file and commit as published. `git commit` and `git push` are denied to Claude in `.claude/settings.json`: the owner makes commits. If the owner asks for help preparing one, show the exact list of files and stop. A secret-blocking check, `git-hooks/pre-commit`, runs before every commit, whoever makes it, and cancels one that includes a secret file, private data, a secret's value, or the real Tailscale address; it is switched on by `git config core.hooksPath git-hooks`, which `git config core.hooksPath` should confirm (it does as of 2026-10-14). Whether it was on for the first four commits (2026-10-12) was not confirmed; a check of them found no secret or real address. Secrets, the database, logs, `local.env` and `CLAUDE.local.md` are in this folder but ignored by git.
 
-**Rules added late in that session, easy to miss.** Claude never modifies its own permissions (the settings files): give the owner the exact text to paste, then read it back. Claude asks before creating or changing any rule or hook. The real Tailscale address and port numbers live only in `local.env` and `CLAUDE.local.md`; every tracked file uses `$TAILSCALE_HOST`, `$OMLX_PORT`, `$WEBUI_PORT`, `$OFFLINE_PORT` and `$RELAY_PORT`. Full text in `.claude/rules/`.
+**Rules easy to miss.** Never run a benchmark from oMLX's admin dashboard: it uploads results to omlx.ai (added 2026-10-14). The repository is public: treat every tracked file as published. Claude never modifies its own permissions (the settings files): give the owner the exact text to paste, then read it back. Claude asks before creating or changing any rule or hook. The real Tailscale address and port numbers live only in `local.env` and `CLAUDE.local.md`; every tracked file uses `$TAILSCALE_HOST`, `$OMLX_PORT`, `$WEBUI_PORT`, `$OFFLINE_PORT` and `$RELAY_PORT`. Full text in `.claude/rules/`.
 
-**Done recently (2026-10-12 to 2026-10-14).**
-- **Relay (F12, M2a; F4, M2b).** `relay.py` records usage to `usage.csv`; `llm-usage` summarizes it per person and per model (messages, time, tokens, length-cap hits, refusals) for the last 24 hours, 7 days and all time, plus the longest requests. The owner reserves with `./llm-reserve` or the badge in the chat page. The owner closed the relay as done on 2026-10-14 with these untested: a guest's temporary chat, Stop and a long reply through the relay, and the owner's own test of the badge switch in a browser.- **Permanent guest notice:** skipped by the owner on 2026-10-14.
+**Done on 2026-10-14.** Details are in OVERVIEW.md; each has a row in `LOGS.local.md`.
+- **Relay closed as done.** `llm-usage` summarizes `usage.csv` per person and per model for the last day, week and all time, with the longest requests. Left untested by the owner's choice: a guest's temporary chat, Stop and a long reply through the relay, and the owner's test of the badge switch in a browser. The permanent guest notice was skipped.
+- **Long-document timings, Qwen (single readings):** 109K tokens took 8.6 minutes before the first word, follow-ups about 2 s, peak memory 25GB. Results are in README.md and OVERVIEW.md section 8.
+- **`tests/long-document-test`** for exact-size runs (10K, 50K, 100K tokens; prose from The Count of Monte Cristo, or code), sizes confirmed against the server's own count for both models. Not yet run in full.
+- **Per-model sampling** (publishers' values: top-k 20 for both, presence penalty 1.5 for Qwen), live without a restart. It made runaway replies rarer on one test question, not gone.
+- **oMLX disk cache:** 50GB limit and a 7-day expiry run by `llm-stop`. The first real deletion happens at a stop from 16 October on; check its output then.
+- **Warm-up in `llm-start`:** confirmed at a real start (Qwen loaded in about 5 s before the chat page was reachable).
+- **R9, oMLX privacy:** nothing leaves the Mac on its own; only its admin dashboard reaches out (update check; benchmark upload, now forbidden by rule).
+- **Branding:** applied, not confirmed (below).
 
-**What the owner wants next.**
-1. **Remove "Open WebUI" branding.** Owner's choice 2026-10-14: no replacement name; the tab reads "Private LLM" with the OI icon kept; every other logo and icon removed. Built and applied the same day without touching installed files (`chat-page/branding.js`, `custom.css`, `blank.png`, copied in by `llm-start`). **Unfinished:** the owner still saw "Open WebUI" in several places, possibly the browser's saved copy; set aside by the owner. Next: the owner checks in a private window and names each place and its wording.
-2. **M1 measurements**, listed below.
+**Set aside by the owner (2026-10-14), do not start without asking.**
+- **Branding check.** No replacement name; tab "Private LLM"; OI tab icon kept; other logos removed, through `chat-page/branding.js`, `custom.css` and `blank.png` (no installed files changed). The owner still saw "Open WebUI" in several places, possibly the browser's saved copy. Next step when resumed: the owner checks in a private window and names each place and its wording.
+- **The 3-round performance run:** `./tests/long-document-test --rounds 3 qwen:prose laguna:prose laguna:code`, about 2 to 2.5 hours at a quiet time. Then the owner decides whether an 8-minute first read of 100K tokens is acceptable (Q4). Recommended next after that: the FP16 oQ4 build of Qwen, said to read prompts faster on M1 chips.
+- **Thinking:** the main cause of slow replies (17 to 42 s). Caps set 2026-10-14 (DECIDED): Qwen 8,000 tokens, Laguna 10,000, after a real question ran out of room with no answer; a runaway now ends in an answer. Thinking per reply is recorded by the relay and shown in `llm-usage` with how often each cap is reached, so the owner can raise a cap if needed. Still to measure: on, capped at other values, and off, for time and answer quality.
+- **Runaway-reply follow-ups:** a deliberate Stop test with the test account on a sleeping phone; later, cancel or time limit in the gatekeeper.
+- **Queue (M2c):** the next big build. Start with design questions for the owner.
 
-**Also open, not yet scheduled.**
-- Long-document timings (section 8). The measurement a hardware decision depends on. First run done 2026-10-14 for Qwen3.6-35B-A3B: 109K tokens took 8.6 minutes before the first word, follow-ups about 2 s, peak memory 25GB (OVERVIEW.md section 8). Waiting on the owner: is that wait acceptable (Q4)? Recommended next: the same test with the FP16 oQ4 build, said to read prompts faster on M1 chips.
-- Thinking: the main cause of slow replies. Limit it or make it a per-chat choice.
-- Runaway replies: publishers' sampling values set per model 2026-10-14 (top-k 20 for both; presence penalty 1.5 for Qwen), which made one test question's runaway rarer but not gone (OVERVIEW.md section 9). The owner set aside the rest on 2026-10-14: a deliberate Stop test; trying oMLX's per-model thinking budget (best measured with the performance run); later, cancel or time limit in the gatekeeper.
-- oMLX disk cache: done 2026-10-14. Examined (derived working state, no text); the owner chose a 50GB limit and a 7-day expiry run by `llm-stop` (OVERVIEW.md section 9).
-- Warm-up request in `llm-start`: built 2026-10-14 (loads Open WebUI's default model before the address points back at the chat page). Confirmed at a real start the same day.
+**Also open, not scheduled.**
 - Research R10 for saved conversations private from the admin, then the owner decides how strong that guarantee must be.
 - `README.md`'s "Setup on a new machine" section is an untested sketch.
+- `node` on this Mac is broken by a missing Homebrew library (`brew reinstall node` fixes it); the project does not use it.
 
 **Decisions not to re-open** unless something new is learned: the hidden prompt from Open WebUI's built-in tools stays as it is; the owner chats from the admin account; guests sign up and the owner approves; logins last 7 days; replies are capped at 20,000 tokens; uploads are on. The full list is in OVERVIEW.md section 6.
 
@@ -223,7 +229,7 @@ A UI showing memory pressure in real time, so users can see when they will begin
 - UNVERIFIED how precisely per-process GPU memory can be read on macOS. The view may need to be approximate; say so in the UI if it is.
 - oMLX's admin dashboard and its memory-guard feature may supply part of this (UNVERIFIED); check before building from scratch.
 
-### F7. Document slot save/restore [BOOKMARKED, wanted]
+### F7. Document slot save/restore [MET by oMLX 2026-10-14, see M6]
 Save a processed document's state to disk and restore it in seconds after eviction, so a multi-minute prefill is not repeated. Also allows keeping several processed documents for later.
 - **oMLX** persists KV cache blocks to SSD and restores matching prefixes after requests and restarts **(checked, project's own description)**. This may satisfy F7 without custom work. UNVERIFIED at 100K+ tokens on this hardware.
 - **llama.cpp** has a slot save/restore API (needs `--slot-save-path`); a client or proxy must call it. UNVERIFIED at 100K+ tokens on this hardware.
@@ -262,7 +268,7 @@ When the LLM is stopped, guests should see a clear page saying the server is off
 
 ### F12. Usage logging per user [DECIDED 2026-10-12]
 The owner wants to know which models each user uses, how many tokens they consume, and how long they occupy the server.
-- **Record per request:** time, user, model, prompt tokens, reply tokens, seconds occupied, and how the reply ended (finished, stopped, or hit the length cap).
+- **Record per request:** time, user, model, prompt tokens, reply tokens, seconds occupied, how many reply tokens were thinking (added 2026-10-14, to monitor the thinking caps), and how the reply ended (finished, stopped, or hit the length cap).
 - **Never record** prompt or reply text.
 - **Summaries on demand:** per user per day, per model, longest requests.
 - **Transparency (F9):** guests are told that usage (who, when, how much) is recorded, in the same notice that tells them chats are not saved.
@@ -284,7 +290,7 @@ The owner wants to know which models each user uses, how many tokens they consum
 - [ ] **M3 Status page.** Queue position, user count, owner-priority banner, messaging.
 - [ ] **M4 Memory view.** Live breakdown with soft warnings.
 - [ ] **M5 Model selection.** Swap requests through the queue, with measured swap-time estimates.
-- [ ] **M6 Slot save/restore.** If the chosen server supports it (oMLX may already provide it).
+- [x] **M6 Slot save/restore.** Done 2026-10-14 without custom work: oMLX's disk cache keeps a processed document across model switches and restarts (tested), and with `RAG_SYSTEM_CONTEXT=true` follow-ups about an uploaded document reuse it through the chat page (1.2 s instead of 127 s for 46K tokens). Limits: a fresh upload in a new chat is read again in full (Open WebUI gives it a new file id); the cache keeps at most 50GB and 7 days.
 - [ ] **Saved conversations (F9).** After the MVP. Research R10 first, then the owner chooses how strong the "admin cannot read" guarantee must be.
 
 ### Smaller planned items

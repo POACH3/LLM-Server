@@ -15,8 +15,15 @@
 # call is the model asking one of the chat page's built-in tools for
 # something; the chat page then sends a follow-up request for the same
 # message. Those count toward time and tokens but not toward messages.
+#
+# Thinking: how many reply tokens were the model's thinking (recorded since
+# 2026-10-14; older rows have none), the most in one reply, each model's
+# thinking cap as set in oMLX (~/.omlx/model_settings.json, read only), and
+# how many replies reached it. Replies that often reach the cap suggest the
+# cap is too low for the questions being asked.
 
 import csv
+import json
 import os
 import sys
 from datetime import datetime, timedelta
@@ -25,6 +32,23 @@ USAGE_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "usage.cs
 WINDOWS = [("Last 24 hours", timedelta(hours=24)), ("Last 7 days", timedelta(days=7)),
            ("All time", None)]
 LONGEST = 5
+# The relay's thinking count is an estimate (within a few tokens of the cap
+# in tests), so "reached the cap" allows a little room.
+AT_CAP = 0.97
+
+
+def thinking_caps():
+    # Each model's thinking cap from oMLX's per-model settings, if set.
+    try:
+        with open(os.path.expanduser("~/.omlx/model_settings.json")) as f:
+            models = json.load(f).get("models", {})
+    except (OSError, ValueError):
+        return {}
+    return {name: s["thinking_budget_tokens"] for name, s in models.items()
+            if isinstance(s, dict) and s.get("thinking_budget_enabled") and s.get("thinking_budget_tokens")}
+
+
+CAPS = thinking_caps()
 
 
 def number(value, kind=int):
@@ -58,13 +82,15 @@ def read_rows():
             row["prompt"] = number(row.get("prompt_tokens"))
             row["reply"] = number(row.get("reply_tokens"))
             row["seconds"] = number(row.get("seconds"), float)
+            value = (row.get("thinking_tokens") or "").strip()
+            row["thinking"] = number(value) if value else None
             rows.append(row)
     return rows
 
 
 def new_totals():
     return {"messages": 0, "tool": 0, "seconds": 0.0, "prompt": 0, "reply": 0,
-            "cap": 0, "refused": 0}
+            "cap": 0, "refused": 0, "thinking": 0, "most_thinking": 0, "at_cap": 0, "thinking_rows": 0}
 
 
 def add(totals, row):
@@ -80,6 +106,13 @@ def add(totals, row):
     totals["seconds"] += row["seconds"]
     totals["prompt"] += row["prompt"]
     totals["reply"] += row["reply"]
+    if row["thinking"] is not None:
+        totals["thinking_rows"] += 1
+        totals["thinking"] += row["thinking"]
+        totals["most_thinking"] = max(totals["most_thinking"], row["thinking"])
+        cap = CAPS.get(row["model"])
+        if cap and row["thinking"] >= AT_CAP * cap:
+            totals["at_cap"] += 1
 
 
 def summarize(rows):
@@ -117,11 +150,20 @@ def count(key):
     return lambda t: format(t[key], ",")
 
 
+def thinking(key):
+    # A dash where none of the requests has a thinking count (all from
+    # before it was recorded), so it does not read as "no thinking".
+    return lambda t: format(t[key], ",") if t["thinking_rows"] else "-"
+
+
 TOTALS = [("Messages", count("messages"), False), ("Tool steps", count("tool"), False),
           ("Time", lambda t: duration(t["seconds"]), False),
           ("Prompt tokens", count("prompt"), False), ("Reply tokens", count("reply"), False),
           ("Total tokens", lambda t: format(t["prompt"] + t["reply"], ","), False),
-          ("Cap hits", count("cap"), False)]
+          ("Cap hits", count("cap"), False),
+          ("Thinking tokens", thinking("thinking"), False),
+          ("Most thinking", thinking("most_thinking"), False),
+          ("At thinking cap", thinking("at_cap"), False)]
 
 
 def show(title, rows):
@@ -133,7 +175,8 @@ def show(title, rows):
     table([("User", lambda p: p["name"], True)] + TOTALS + [("Refused", count("refused"), False)],
           people)
     print()
-    table([("User", lambda t: t["name"], True), ("Model", lambda t: t["model"], True)] + TOTALS,
+    table([("User", lambda t: t["name"], True), ("Model", lambda t: t["model"], True)] + TOTALS
+          + [("Thinking cap", lambda t: format(CAPS[t["model"]], ",") if t["model"] in CAPS else "none", False)],
           by_model)
     print()
 
@@ -150,6 +193,7 @@ def show_longest(rows):
            ("Time", lambda r: duration(r["seconds"]), False),
            ("Prompt tokens", lambda r: format(r["prompt"], ","), False),
            ("Reply tokens", lambda r: format(r["reply"], ","), False),
+           ("Thinking", lambda r: format(r["thinking"], ",") if r["thinking"] is not None else "", False),
            ("Ended", lambda r: r["ended"] or "unknown", True)], longest)
     print()
 
@@ -168,4 +212,6 @@ show_longest(rows)
 print("Messages are what people sent. Tool steps are extra requests the chat page makes when the model uses a built-in tool for a message.")
 print("Time is how long the server was busy with each person's requests; overlapping requests each count in full.")
 print("Cap hits are replies stopped at the length limit (20,000 tokens unless a request asked for less).")
+print("Thinking tokens are the part of the reply the model spent thinking (an estimate; recorded since 2026-10-14).")
+print("At thinking cap counts replies whose thinking reached the model's cap; if this is often above zero, the cap may be too low.")
 print("Prompt tokens include the whole conversation so far and the chat page's hidden tool descriptions, so they grow with each message in a chat.")

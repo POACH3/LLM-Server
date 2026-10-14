@@ -4,7 +4,9 @@
 # model passes through it. It does two jobs:
 #
 #   1. Usage records. One row per chat request: when, who, which model, how
-#      many tokens, how long, and how it ended.
+#      many tokens, how long, how it ended, and how many of the reply's
+#      tokens were the model's thinking (to see whether the thinking cap is
+#      reached; counted from the length of the thinking, never stored).
 #   2. Reserving the server. While the owner has reserved it, new chat
 #      requests from anyone else are refused with a clear message. A reply
 #      already in progress finishes. The owner's own requests go through.
@@ -92,7 +94,7 @@ reserved = False
 in_progress = 0
 
 COLUMNS = ["time", "user_name", "user_id", "model", "prompt_tokens",
-           "reply_tokens", "seconds", "ended"]
+           "reply_tokens", "seconds", "ended", "thinking_tokens"]
 
 
 def open_usage_file():
@@ -101,6 +103,18 @@ def open_usage_file():
     if not os.path.exists(USAGE_FILE) or os.path.getsize(USAGE_FILE) == 0:
         with open(USAGE_FILE, "a", newline="") as f:
             csv.writer(f).writerow(COLUMNS)
+    else:
+        # A file from before a column was added: extend its heading row so
+        # the new column has a name. Older rows simply leave it empty.
+        with open(USAGE_FILE, newline="") as f:
+            lines = f.read().split("\n", 1)
+        heading = next(csv.reader([lines[0]]))
+        if heading != COLUMNS and COLUMNS[:len(heading)] == heading:
+            temporary = USAGE_FILE + ".new"
+            with open(temporary, "w", newline="") as f:
+                csv.writer(f).writerow(COLUMNS)
+                f.write(lines[1] if len(lines) > 1 else "")
+            os.replace(temporary, USAGE_FILE)
     os.chmod(USAGE_FILE, 0o600)
 
 
@@ -110,6 +124,21 @@ def safe(value):
     if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
         return "'" + value
     return "" if value is None else value
+
+
+def thinking_tokens(seen):
+    # How many of the reply's tokens were thinking. The model server's own
+    # count if it gives one; otherwise an estimate: the reply's exact token
+    # count, shared out by how many characters were thinking and how many
+    # were answer (a reply that hit the thinking cap at 8,000 came out at
+    # 7,999). Empty when the reply's token count is unknown.
+    if seen["thinking_exact"] is not None:
+        return seen["thinking_exact"]
+    reply, thinking = seen["reply"], seen["thinking_chars"]
+    if not isinstance(reply, int):
+        return ""
+    total = thinking + seen["answer_chars"]
+    return round(reply * thinking / total) if total else 0
 
 
 def record(row):
@@ -155,18 +184,37 @@ class Relay(BaseHTTPRequestHandler):
             seen["prompt"], seen["reply"],
             round(time.time() - started, 1),
             seen["ended"] or "unknown",
+            thinking_tokens(seen),
         )
 
     def note(self, obj, seen):
-        # Pick the token counts and the ending out of a reply. Nothing else
-        # in the reply is kept.
+        # Pick the token counts and the ending out of a reply, and measure how
+        # long its thinking and its answer are, in characters. Nothing else
+        # in the reply is kept; the text itself is never stored.
         usage = obj.get("usage")
         if isinstance(usage, dict):
             seen["prompt"] = usage.get("prompt_tokens", seen["prompt"])
             seen["reply"] = usage.get("completion_tokens", seen["reply"])
+            details = usage.get("completion_tokens_details")
+            if isinstance(details, dict) and isinstance(details.get("reasoning_tokens"), int):
+                seen["thinking_exact"] = details["reasoning_tokens"]
         for choice in obj.get("choices") or []:
-            if isinstance(choice, dict) and choice.get("finish_reason"):
+            if not isinstance(choice, dict):
+                continue
+            if choice.get("finish_reason"):
                 seen["ended"] = ENDINGS.get(choice["finish_reason"], choice["finish_reason"])
+            # "delta" in a streamed reply, "message" in a whole one.
+            part = choice.get("delta") or choice.get("message")
+            if isinstance(part, dict):
+                thinking = part.get("reasoning_content") or part.get("reasoning")
+                if isinstance(thinking, str):
+                    seen["thinking_chars"] += len(thinking)
+                if isinstance(part.get("content"), str):
+                    seen["answer_chars"] += len(part["content"])
+                for call in part.get("tool_calls") or []:
+                    arguments = (call.get("function") or {}).get("arguments") if isinstance(call, dict) else None
+                    if isinstance(arguments, str):
+                        seen["answer_chars"] += len(arguments)
 
     def note_stream_line(self, line, seen):
         line = line.strip()
@@ -238,7 +286,8 @@ class Relay(BaseHTTPRequestHandler):
         body = self.read_body()
         recorded = self.command == "POST" and path.endswith(RECORDED)
         model = None
-        seen = {"prompt": None, "reply": None, "ended": None}
+        seen = {"prompt": None, "reply": None, "ended": None,
+                "thinking_chars": 0, "answer_chars": 0, "thinking_exact": None}
 
         if recorded:
             try:

@@ -77,6 +77,18 @@ Poolside's coding model: 33B parameters, about 3B used per word.
 
 **Long documents:** not yet measured.
 
+### Asking again about the same document
+
+oMLX keeps what it has read on disk (up to 50GB, 7 days), so the long first read is not repeated (2026-10-14, Qwen, a 50,000-token prompt read cold in 149 s):
+
+| Asked again | Wait for the first word |
+| --- | --- |
+| After switching to the other model and back | 7.9 s (about 5 s of it reloading the model) |
+| After stopping and starting the server | 0.6 s |
+| A follow-up in the same chat, with an uploaded 46,000-token file | 1.2 s (was 127 s before a setting change) |
+
+Uploading the same file again in a new chat is read in full, because the chat page gives each upload a new identity.
+
 ### Switching models
 
 The two models do not stay in memory together. Choosing the other one in the chat unloads the current one (about 4 s) and loads the other, which is the swap time shown above.
@@ -132,7 +144,7 @@ To add a guest: share the Mac with them in Tailscale's admin console, have them 
 | `chat-page/loader.js` | The status badge added to the chat page (free, in use, reserved) |
 | `chat-page/branding.js`, `custom.css`, `blank.png` | Remove Open WebUI's name and logos from the page, without changing its installed files |
 | `llm-reserve` | The owner's command to reserve the server, release it, or see its state |
-| `llm-usage` | Summarizes the usage records: per person and per model, for the last day, week and all time |
+| `llm-usage` | Summarizes the usage records: per person and per model, for the last day, week and all time, including how much the model thought and how often it reached its thinking cap |
 | `tests/long-document-test`, `tests/build-long-prompt.py` | Times models on long prompts of exact sizes, prose or code (first question and a follow-up), through the relay |
 | `load-local-env.zsh` | Loads the address and ports from `local.env` for the scripts |
 | `local.env.example` | The layout of `local.env`, with placeholder values |
@@ -164,7 +176,7 @@ A check runs before every commit to enforce this. `git-hooks/pre-commit` cancels
 
 - Prompts and replies never leave the Mac. Open WebUI runs in offline mode, with update checks and outside services switched off.
 - Guests' conversations are not saved. The admin's own are, unless a chat is set to temporary.
-- Logs and usage records hold who, when, timings and token counts, never the text of a conversation.
+- Logs and usage records hold who, when, timings and token counts (including how many tokens the model spent thinking), never the text of a conversation.
 - oMLX keeps the model's processed form of recent prompts on disk, so long documents need not be read again. It holds no text, is limited to 50GB, and anything older than 7 days is deleted when the server is stopped.
 - To produce an answer, the Mac has to see the prompt and reply while the request runs. Whoever operates the Mac is trusted not to record them.
 
