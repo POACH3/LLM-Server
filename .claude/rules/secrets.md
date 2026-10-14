@@ -7,5 +7,5 @@
 - Never record the text of anyone's prompt or reply, in logs, documents or commits. Usage records hold who, when, which model, how many tokens and how long. Nothing else.
 - Nothing may send prompts, replies or documents off this Mac. Ask the owner before adding any dependency or setting that contacts an outside service.
 - The real Tailscale address, tailnet name, machine name, Tailscale IP and port numbers live only in `local.env` and `CLAUDE.local.md`, which git ignores. In every tracked file, commit message and document use the placeholders (`$TAILSCALE_HOST`, `$OMLX_PORT`, `$WEBUI_PORT`, `$OFFLINE_PORT`, `$RELAY_PORT`, `(tailnet name)`, `(machine name)`, `(Tailscale IP)`). When pasting command output into a document, replace the real values first.
-- The repository is local and private. `OVERVIEW.md` still describes how the server is secured and where its weak spots are; review it before the repository is ever made public.
+- The repository is public on GitHub (`origin`). Treat every tracked file, commit message and pushed commit as published. `OVERVIEW.md` describes how the server is secured and where its weak spots are; it is public by the owner's choice.
 - A check in git-hooks/pre-commit cancels any commit containing a secret, private data, or the real Tailscale address; never skip it with --no-verify.

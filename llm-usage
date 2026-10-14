@@ -1,0 +1,171 @@
+#!/usr/bin/python3
+# Summarizes the relay's usage records (usage.csv): who used the chat in the
+# last 24 hours, the last 7 days and all time, how many messages, how long
+# they kept the server busy, how many tokens, and which models; then the
+# longest requests ever recorded.
+#
+#   llm-usage
+#
+# Only reads usage.csv; changes nothing, so there is nothing to undo. The
+# file holds no message text, and neither does this summary.
+#
+# People are grouped by account id, so a renamed account stays one row; the
+# most recent name is shown. Requests refused while the server was reserved
+# used no tokens and are counted separately. A request that ended in a tool
+# call is the model asking one of the chat page's built-in tools for
+# something; the chat page then sends a follow-up request for the same
+# message. Those count toward time and tokens but not toward messages.
+
+import csv
+import os
+import sys
+from datetime import datetime, timedelta
+
+USAGE_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "usage.csv")
+WINDOWS = [("Last 24 hours", timedelta(hours=24)), ("Last 7 days", timedelta(days=7)),
+           ("All time", None)]
+LONGEST = 5
+
+
+def number(value, kind=int):
+    try:
+        return kind(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def duration(seconds):
+    seconds = int(round(seconds))
+    if seconds < 60:
+        return "%ds" % seconds
+    if seconds < 3600:
+        return "%dm %02ds" % (seconds // 60, seconds % 60)
+    return "%dh %02dm" % (seconds // 3600, seconds % 3600 // 60)
+
+
+def read_rows():
+    rows = []
+    with open(USAGE_FILE, newline="") as f:
+        for row in csv.DictReader(f):
+            try:
+                # The relay writes the Mac's local time.
+                row["when"] = datetime.strptime(row["time"], "%Y-%m-%d %H:%M:%S")
+            except (KeyError, TypeError, ValueError):
+                continue
+            row["ended"] = row.get("ended") or ""
+            row["name"] = (row.get("user_name") or "unknown").lstrip("'")
+            row["model"] = row.get("model") or "unknown"
+            row["prompt"] = number(row.get("prompt_tokens"))
+            row["reply"] = number(row.get("reply_tokens"))
+            row["seconds"] = number(row.get("seconds"), float)
+            rows.append(row)
+    return rows
+
+
+def new_totals():
+    return {"messages": 0, "tool": 0, "seconds": 0.0, "prompt": 0, "reply": 0,
+            "cap": 0, "refused": 0}
+
+
+def add(totals, row):
+    if row["ended"].startswith("refused"):
+        totals["refused"] += 1
+        return
+    if row["ended"] == "tool_calls":
+        totals["tool"] += 1
+    else:
+        totals["messages"] += 1
+    if row["ended"] == "length cap":
+        totals["cap"] += 1
+    totals["seconds"] += row["seconds"]
+    totals["prompt"] += row["prompt"]
+    totals["reply"] += row["reply"]
+
+
+def summarize(rows):
+    people, by_model = {}, {}
+    for row in rows:
+        key = row.get("user_id") or "unknown"
+        person = people.setdefault(key, dict(new_totals(), name="", last=row["when"]))
+        if row["when"] >= person["last"] or not person["name"]:
+            person["name"], person["last"] = row["name"], row["when"]
+        add(person, row)
+        if not row["ended"].startswith("refused"):
+            add(by_model.setdefault((key, row["model"]), new_totals()), row)
+    for (key, model), totals in by_model.items():
+        totals["name"], totals["model"] = people[key]["name"], model
+    busiest = lambda t: (t["prompt"] + t["reply"], t["seconds"])
+    return (sorted(people.values(), key=busiest, reverse=True),
+            sorted(by_model.values(), key=lambda t: (t["name"], -busiest(t)[0])))
+
+
+def table(columns, rows):
+    # columns: (heading, function from row to text, align left?)
+    cells = [[get(r) for _, get, _ in columns] for r in rows]
+    widths = [max([len(h)] + [len(c[i]) for c in cells]) for i, (h, _, _) in enumerate(columns)]
+
+    def line(values):
+        return "  " + "  ".join(v.ljust(w) if left else v.rjust(w)
+                                for v, w, (_, _, left) in zip(values, widths, columns)).rstrip()
+
+    print(line([h for h, _, _ in columns]))
+    for c in cells:
+        print(line(c))
+
+
+def count(key):
+    return lambda t: format(t[key], ",")
+
+
+TOTALS = [("Messages", count("messages"), False), ("Tool steps", count("tool"), False),
+          ("Time", lambda t: duration(t["seconds"]), False),
+          ("Prompt tokens", count("prompt"), False), ("Reply tokens", count("reply"), False),
+          ("Total tokens", lambda t: format(t["prompt"] + t["reply"], ","), False),
+          ("Cap hits", count("cap"), False)]
+
+
+def show(title, rows):
+    print(title)
+    if not rows:
+        print("  Nobody.\n")
+        return
+    people, by_model = summarize(rows)
+    table([("User", lambda p: p["name"], True)] + TOTALS + [("Refused", count("refused"), False)],
+          people)
+    print()
+    table([("User", lambda t: t["name"], True), ("Model", lambda t: t["model"], True)] + TOTALS,
+          by_model)
+    print()
+
+
+def show_longest(rows):
+    used = [r for r in rows if not r["ended"].startswith("refused")]
+    longest = sorted(used, key=lambda r: r["seconds"], reverse=True)[:LONGEST]
+    print("Longest %d requests, all time" % LONGEST)
+    if not longest:
+        print("  None.\n")
+        return
+    table([("When", lambda r: r["when"].strftime("%Y-%m-%d %H:%M"), True),
+           ("User", lambda r: r["name"], True), ("Model", lambda r: r["model"], True),
+           ("Time", lambda r: duration(r["seconds"]), False),
+           ("Prompt tokens", lambda r: format(r["prompt"], ","), False),
+           ("Reply tokens", lambda r: format(r["reply"], ","), False),
+           ("Ended", lambda r: r["ended"] or "unknown", True)], longest)
+    print()
+
+
+try:
+    rows = read_rows()
+except FileNotFoundError:
+    sys.exit("No usage records yet: %s does not exist. The relay creates it on the first chat request." % USAGE_FILE)
+except PermissionError:
+    sys.exit("Cannot read %s (only the Mac account that runs the server can)." % USAGE_FILE)
+
+now = datetime.now()
+for title, span in WINDOWS:
+    show(title, [r for r in rows if span is None or r["when"] >= now - span])
+show_longest(rows)
+print("Messages are what people sent. Tool steps are extra requests the chat page makes when the model uses a built-in tool for a message.")
+print("Time is how long the server was busy with each person's requests; overlapping requests each count in full.")
+print("Cap hits are replies stopped at the length limit (20,000 tokens unless a request asked for less).")
+print("Prompt tokens include the whole conversation so far and the chat page's hidden tool descriptions, so they grow with each message in a chat.")

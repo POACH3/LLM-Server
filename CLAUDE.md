@@ -63,6 +63,7 @@ The full rules are in `.claude/rules/`. The ones most likely to be broken by acc
 4. **Never hard-code a model name.**
 5. **Nothing auto-starts or auto-restarts.** Everything listens on `127.0.0.1` only.
 6. **Log only high-level changes and decisions**, in `LOGS.local.md` (use the `record-change` skill). Routine operation and document edits do not need a row.
+7. **Test requests go in as `agent-testing`.** When Claude has to send a request to the model, it uses the user name `agent-testing`, never a real person's name or account.
 
 ## Things that will trip you up
 

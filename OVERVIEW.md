@@ -1,7 +1,7 @@
 # Private LLM Server: Overview
 
-- **As of:** 2026-10-12
-- **Status:** The first milestone (M0) is complete. The server runs on the Mac Studio, you and two guests have chatted with it from your own devices, and guests' conversations are not saved. The server is currently stopped; start it with `./llm-start` from the project folder. Next to build is the usage-logging relay. The project folder is a local git repository with no commits yet; a secret-blocking check runs before every commit (section 10).
+- **As of:** 2026-10-14
+- **Status:** The first milestone (M0) is complete. The server runs on the Mac Studio, you and two guests have chatted with it from your own devices, and guests' conversations are not saved. The relay is done (you closed it on 2026-10-14): it records usage per request and lets you reserve the server from the Mac or the badge in the chat page. Start and stop it with `./llm-start` and `./llm-stop` from the project folder. The project folder is a git repository with a public copy on GitHub; a secret-blocking check runs before every commit (section 10).
 - **Picking up in a new chat:** the handoff at the top of [SPEC.md](SPEC.md) says what to check first and what comes next. The last rows of the log in `LOGS.local.md` (not in git) say what happened most recently.
 - **What this file is:** the record of what was actually done: decisions, what is installed and how it is set up, measurements, findings, and notes from each tool's documentation. The dated log is kept separately in `LOGS.local.md`.
 - **Companion file:** [SPEC.md](SPEC.md) holds how you want the project built: goals, constraints, architecture, features and plans.
@@ -53,6 +53,7 @@ The two programs on the Mac listen only on the Mac itself. The only way in from 
 | Chat from any of your Tailscale devices | `https://$TAILSCALE_HOST` |
 | Chat at the Mac if Tailscale or the internet is down | `http://localhost:$WEBUI_PORT` |
 | Turn the Tailscale address off / on | `tailscale serve --https=443 off` / `tailscale serve --bg $WEBUI_PORT` |
+| See who used it, how long, which models and how many tokens (last 24 hours, 7 days, all time) | `~/Documents/Code/llm-server/llm-usage` |
 | Look at logs | `~/Documents/Code/llm-server/omlx.log`, `~/Documents/Code/llm-server/open-webui.log` |
 
 - Nothing starts by itself at login or after a reboot, except the Tailscale app. After a reboot, run `llm-start`.
@@ -113,6 +114,8 @@ To remove a guest, revoke the share in Tailscale and delete or deactivate the ac
 | Hidden prompt from Open WebUI's built-in tools | Leave as is; 5 to 6 seconds per conversation is acceptable |
 | Usage logging | Record per request who, which model, how many tokens and how long, never the text; done by the relay between Open WebUI and oMLX, written to `usage.csv` |
 | Reserving the server | The owner reserves it with `llm-reserve on`: a guest's reply in progress finishes, new guest requests are refused with a clear message, the owner's go through; it clears on restart |
+| Relay | Done as built (2026-10-14): usage records, reserving, the status badge and the owner's switch on it. Usage summaries: `llm-usage`, per person for the last 24 hours and 7 days |
+| Permanent guest notice (chats not saved, usage recorded) | Skipped (2026-10-14) |
 | Budget | No hardware purchase without measurements that justify it |
 
 ### Interview answers in detail (Stage 0, 2026-09-30 to 2026-10-10)
@@ -216,7 +219,7 @@ Measured straight at oMLX, not through the chat page or the relay. Short prompt 
 2. **Runaway reply.** One reply ran for 17.7 minutes until it hit the length limit, slowing everyone. The cap is now 20,000 tokens. Investigated on 2026-10-12, see "The runaway reply" below.
 3. **No queue yet.** Requests from several people run at once and slow each other down.
 4. **Offline page.** Built 2026-10-12, first as plain text and then as a styled page handed out by a small program. After a reboot the address shows a bare error until you run `llm-start` or `llm-stop`. Not yet seen in a real browser: the look on a phone through Tailscale, and the automatic switch to the chat.
-5. **"Nothing is saved" notice for guests.** The temporary-chat label disappears after the first message. A permanent banner is the planned fix.
+5. **"Nothing is saved" notice for guests.** The temporary-chat label disappears after the first message. You decided on 2026-10-14 not to add a permanent notice, so guests are not told in the page that usage is recorded.
 6. **The oMLX cache.** It grows with use and its automatic limit is about 220GB. What it holds and how to cap or expire it is still to be examined.
 7. **Housekeeping for you.** Empty the Trash, which holds the first Open WebUI data folder with a test chat and a copy of the oMLX key. Two saved test chats remain in your admin account.
 8. **API key in two places.** Open WebUI keeps a plain-text copy of the oMLX key in its database. Changing the key means updating both.
@@ -277,6 +280,7 @@ Update this section whenever the setup changes.
 | `~/Documents/Code/LLM-Server/open-webui-static/` | Open WebUI's page-extras folder (`STATIC_DIR`), kept in the project so its installed files are not touched. Open WebUI empties and refills it at every start; `llm-start` then copies the badge in as `loader.js`. Not in git |
 | `~/Documents/Code/llm-server/llm-reserve` | `llm-reserve on`, `off` or `status`: reserves the server for the owner, releases it, or shows free, in use or reserved |
 | `~/Documents/Code/llm-server/relay.py` | The relay on 127.0.0.1:$RELAY_PORT. Passes every request from Open WebUI on to oMLX, records one row per chat request, and while the server is reserved refuses chat requests from anyone whose role is not admin (they are recorded as "refused: reserved"). Started and stopped by `llm-start` and `llm-stop`. Uses the Mac's own `/usr/bin/python3`. For streamed replies it adds a standard flag asking oMLX to report token counts |
+| `~/Documents/Code/llm-server/llm-usage` | Summarizes `usage.csv` for the last 24 hours, the last 7 days and all time: per person, messages sent, tool steps (extra requests when the model uses a built-in tool), time the server was busy, prompt, reply and total tokens, replies stopped at the length cap, and requests refused while reserved; the same per person per model; then the 5 longest requests ever. Groups by account id and shows the latest name. Only reads the file. Uses the Mac's own `/usr/bin/python3`. Its totals were checked against `usage.csv` by a separate count (2026-10-14) |
 | `~/Documents/Code/llm-server/usage.csv` | The usage records: time, user name, user id, model, prompt tokens, reply tokens, seconds, how it ended. No text. Not in git; readable only by this Mac account. Opens in a text editor or spreadsheet |
 | `~/Documents/Code/llm-server/start-open-webui.sh` | Loads the settings and key, runs Open WebUI in the foreground (used by `llm-start`) |
 | `~/Documents/Code/llm-server/SPEC.md`, `OVERVIEW.md`, `CLAUDE.md` | The project documents, and the summary Claude Code reads at the start of a session |
@@ -293,7 +297,7 @@ Update this section whenever the setup changes.
 
 ### Repository and safeguards
 
-The project folder is a local git repository: no remote, nothing pushed, and no commits yet. You make the commits; Claude cannot.
+The project folder is a git repository. You made four commits on 2026-10-12 and pushed them to GitHub (`origin`). The GitHub repository is public, by your choice (2026-10-14), so everything committed is published, including this file's notes on how the server is secured. A check of all four pushed commits on 2026-10-14 found no secret file, no secret's value, and no real address, tailnet name, Tailscale IP or port number. You make the commits and pushes; Claude cannot.
 
 **Three layers keep secrets and private data out of the repository.**
 
@@ -307,7 +311,7 @@ About the pre-commit check:
 - It is switched on by a git setting local to this copy: `git config core.hooksPath git-hooks`. Check it with `git config core.hooksPath`, which should print `git-hooks`. A fresh copy of the repository needs that command run once.
 - When it cancels a commit, it prints which file or value caused it. Unstage or fix that item and commit again.
 - It can be skipped with `git commit --no-verify`. It guards against accidents, not against a deliberate override.
-- It was tested by running it directly against seven staged situations (two that should pass, five that should be cancelled). It has not yet been exercised by a real commit.
+- It was tested by running it directly against seven staged situations (two that should pass, five that should be cancelled). It was switched on as of 2026-10-14; whether it was on for the first four commits was not confirmed.
 
 **What limits Claude Code in this project** (all in `.claude/`, and applying only to Claude, never to you):
 
@@ -331,7 +335,7 @@ When a permission needs changing, Claude gives you the text and you paste it int
 - **Extra model requests:** automatic titles, tags, follow-ups, autocomplete and query generation off; code interpreter and execution off; memories, notes, channels, ratings, arena and chat sharing off.
 - **Documents:** an uploaded document's full text is placed in the conversation (no search index).
 - **Reply length:** oMLX's default limit is 20,000 tokens per reply (`sampling.max_tokens` in `~/.omlx/settings.json`; edit only while oMLX is stopped).
-- **Usage records:** Open WebUI sends each model request to the relay (its saved connection address was changed to the relay's port on 2026-10-12), with the user's name and id attached (`ENABLE_FORWARD_USER_INFO_HEADERS=true`). Tested with one message from the admin account: the row's token counts matched oMLX's own log. Not tested: a guest's temporary chat, Stop, and long replies through the relay.
+- **Usage records:** Open WebUI sends each model request to the relay (its saved connection address was changed to the relay's port on 2026-10-12), with the user's name and id attached (`ENABLE_FORWARD_USER_INFO_HEADERS=true`). Tested with one message from the admin account: the row's token counts matched oMLX's own log. Not tested: a guest's temporary chat, Stop, and long replies through the relay. The owner closed the relay as done on 2026-10-14 with these left untested. `llm-usage` summarizes the records per person and per model, for the last 24 hours, 7 days and all time, with the longest requests (added and extended 2026-10-14; its totals were checked against `usage.csv` by a separate count).
 - **Owner's switch:** for an admin the badge shows "reserve" or "release" and is clickable. The click goes to `/llm-reserve`, which Tailscale Serve passes to the relay, carrying the page's sign-in token. The relay hands that token to Open WebUI on this Mac (`/api/v1/auths/`) and acts only if the answer is an admin; it does not keep or log the token. Tested against the real Open WebUI from the Mac: no token and a made-up token are both refused. The safety of the switch rests on Open WebUI's sign-in.
 - **Status badge:** Tailscale Serve passes three addresses: `/` to the chat page, `/llm-status` to the relay's read-only state, and `/llm-reserve` to the owner's switch. The state (free, in use, reserved, and how many requests are in progress) is readable by any device that can reach the Tailscale address, signed in or not. Tested from the Mac: reserving cannot be reached through the Tailscale address. Open WebUI's API documentation page loses its styling with the folder moved; it is not used here.
 - **Default model:** new chats start on the Qwen model for everyone (`ui.default_models` in Open WebUI's saved settings, set 2026-10-12). Without it Open WebUI picks the first model alphabetically. A person's own chosen default overrides it. If the default model is ever removed, change this setting in Admin Panel, Settings, Models.

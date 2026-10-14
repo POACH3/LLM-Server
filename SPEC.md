@@ -1,7 +1,7 @@
 # Private LLM Server: Design Spec
 
-- **As of:** 2026-10-12 (first written 2026-09-30)
-- **Status:** M0 (baseline) is complete: the server runs and guests have used it. M1 (measure) has begun with two investigations. The relay is built: it records usage (M2a) and lets the owner reserve the server from the Mac (first part of M2b). A badge in the chat page shows free, in use or reserved. The owner can reserve from the Mac or by clicking the badge. The server is currently stopped.
+- **As of:** 2026-10-14 (first written 2026-09-30)
+- **Status:** M0 (baseline) is complete: the server runs and guests have used it. M1 (measure) has begun with two investigations. The relay is done (closed by the owner 2026-10-14): it records usage (M2a), summarized by `llm-usage`, and lets the owner reserve the server from the Mac or by clicking the badge in the chat page (M2b). The badge shows everyone free, in use or reserved.
 - **What this file is:** how the owner wants this project built: goals, constraints, architecture, features and plans.
 - **Companion file:** [OVERVIEW.md](OVERVIEW.md) holds everything about what was actually done: decisions, what is installed and how it is configured, measurements, findings, and notes from each tool's documentation.
 - **Audience:** a Claude agent (or human) implementing or extending this project.
@@ -14,7 +14,7 @@
 
 **How the owner wants to work.** "Slow down. Take each thing one at a time. Be explicit." One step per message, then wait for the owner's go-ahead. Explain in plain language; the owner asks for simpler wording when an explanation is too technical. In a Claude Code session on the Mac the assistant runs commands itself; anything needing a password, an account, a system approval or a browser sign-in is done by the owner. Never print or ask for passwords or the API key. Decisions that are the owner's go through a short multiple-choice question.
 
-**Where we are (updated 2026-10-12, end of the first long working session).** M0 is done. The server is **stopped** (the owner stopped it; the Tailscale address shows the offline message). Nothing is half-finished on the Mac.
+**Where we are (updated 2026-10-14).** M0 is done, and so are M2a and M2b. Nothing is half-finished on the Mac. Whether the server is running changes often; check with the `server-status` skill rather than trusting this file.
 
 **Guard hook: confirmed live 2026-10-12.** `.claude/hooks/protect-claude-config.sh` blocks shell commands that would change Claude's settings, hooks or rules. It was checked at the start of a new session with this harmless command, which only prints text, and the command was blocked as intended:
 
@@ -24,15 +24,16 @@ echo "probe only, changes nothing: cp .claude/settings.json"
 
 No check is needed at the start of each session. Run the probe again only after the hook or its registration in `.claude/settings.json` has changed, in a session started after the change, because hooks load when a session starts. If it is not blocked then, tell the owner and give them corrected text to paste into `.claude/settings.json`; never edit that file yourself. Record the result in the OVERVIEW.md log.
 
-**State of the repository.** This folder (`~/Documents/Code/llm-server`) is a local git repository with **no commits**, no remote, and every project file uncommitted. A first commit was made and then undone at the owner's request because it included files the owner had not been shown. `git commit` and `git push` are now denied to Claude in `.claude/settings.json`: the owner makes commits. If the owner asks for help preparing one, show the exact list of files and stop. A secret-blocking check, `git-hooks/pre-commit`, runs before every commit, whoever makes it, and cancels one that includes a secret file, private data, a secret's value, or the real Tailscale address; it is switched on by `git config core.hooksPath git-hooks`, which `git config core.hooksPath` should confirm. It has not yet been exercised by a real commit, so watch the owner's first one. Secrets, the database, logs, `local.env` and `CLAUDE.local.md` are in this folder but ignored by git.
+**State of the repository.** This folder (`~/Documents/Code/llm-server`) is a git repository. The owner made four commits on 2026-10-12 and pushed them to GitHub (`origin`). The GitHub repository is **public**, by the owner's choice (2026-10-14): treat every tracked file and commit as published. `git commit` and `git push` are denied to Claude in `.claude/settings.json`: the owner makes commits. If the owner asks for help preparing one, show the exact list of files and stop. A secret-blocking check, `git-hooks/pre-commit`, runs before every commit, whoever makes it, and cancels one that includes a secret file, private data, a secret's value, or the real Tailscale address; it is switched on by `git config core.hooksPath git-hooks`, which `git config core.hooksPath` should confirm (it does as of 2026-10-14). Whether it was on for those four commits was not confirmed. Secrets, the database, logs, `local.env` and `CLAUDE.local.md` are in this folder but ignored by git.
 
 **Rules added late in that session, easy to miss.** Claude never modifies its own permissions (the settings files): give the owner the exact text to paste, then read it back. Claude asks before creating or changing any rule or hook. The real Tailscale address and port numbers live only in `local.env` and `CLAUDE.local.md`; every tracked file uses `$TAILSCALE_HOST`, `$OMLX_PORT`, `$WEBUI_PORT`, `$OFFLINE_PORT` and `$RELAY_PORT`. Full text in `.claude/rules/`.
 
-**What the owner wants next, in their order of interest.**
-1. **Relay: usage records (F12, milestone M2a).** Chosen as the next thing to build. First step done 2026-10-12: with `ENABLE_FORWARD_USER_INFO_HEADERS=true` in `open-webui.env`, Open WebUI does send the user's name, id, email and role on each request. The relay itself (now `relay.py`, custom, the owner's choice) was built and wired in the same day and records to `usage.csv`. Still to do: summaries on demand (per user per day, per model, longest requests), and a test with a guest's temporary chat, Stop and a long reply.
-2. **Reserve and status (M2b).** First part built and tested 2026-10-12: the owner reserves from the Mac with `./llm-reserve on` / `off` / `status`, and a guest who sends a message is shown the refusal. The badge in the chat page was added the same day. The owner's switch on the badge followed, completing M2b apart from the owner's own test in a browser. The full feature, built onto the relay: the owner can block other users from the model; a guest's in-flight reply finishes; new guest requests are refused with a clear message; a badge in the chat page shows free, in use or reserved to everyone, with the owner's switch on it.
-3. **A permanent notice for guests** that chats are not saved and usage is recorded, to go live with the relay.
-4. **Remove "Open WebUI" branding.** Waiting on the owner for a name, and a logo if wanted. Needs a re-runnable patch script (section 10).
+**Done recently (2026-10-12 to 2026-10-14).**
+- **Relay (F12, M2a; F4, M2b).** `relay.py` records usage to `usage.csv`; `llm-usage` summarizes it per person and per model (messages, time, tokens, length-cap hits, refusals) for the last 24 hours, 7 days and all time, plus the longest requests. The owner reserves with `./llm-reserve` or the badge in the chat page. The owner closed the relay as done on 2026-10-14 with these untested: a guest's temporary chat, Stop and a long reply through the relay, and the owner's own test of the badge switch in a browser.- **Permanent guest notice:** skipped by the owner on 2026-10-14.
+
+**What the owner wants next.**
+1. **Remove "Open WebUI" branding.** Waiting on the owner for a name, and a logo if wanted. Needs a re-runnable patch script (section 10).
+2. **M1 measurements**, listed below.
 
 **Also open, not yet scheduled.**
 - Long-document timings at 10K, 50K and 100K tokens (section 8). The measurement a hardware decision depends on.
@@ -276,7 +277,7 @@ The owner wants to know which models each user uses, how many tokens they consum
 - [x] **M0 Baseline.** Done 2026-10-12. oMLX, Open WebUI and Tailscale installed; one everyday model; admin account first; guests chatted from their own devices. The step-by-step record is in OVERVIEW.md section 7.
 - [ ] **M1 Measure.** Time long-document prompts, generation speed, memory use, model swaps and cache behavior (section 8). Use the results to choose the model server and to decide whether an upgrade is needed. Decide whether two resident models are viable.
 - [ ] **M2 Gatekeeper.** Proxy in front of the model server, built in slices:
-  - [x] **M2a Relay, usage records (F12).** Built 2026-10-12 as a custom relay writing `usage.csv`. Still to do: summaries on demand, the guest notice, and a test with a guest's chat.
+  - [x] **M2a Relay, usage records (F12).** Built 2026-10-12 as a custom relay writing `usage.csv`; `llm-usage` summaries added and the relay closed as done 2026-10-14. Guest notice skipped; a test with a guest's chat not done.
   - [x] **M2b Reserve and status (owner priority 2026-10-12).** Part done 2026-10-12: reserving from the Mac (`llm-reserve`), refusal message, and the relay reporting free, in use or reserved. The badge in the chat page is also done. The owner's switch on the badge is done too. In full: The owner can block other users from the model; an in-flight guest reply finishes; the relay reports free, in use or reserved; a badge in the chat page shows it to everyone, with the owner's switch on it.
   - [ ] **M2c** Single-request limit and queue, user count.
   - [ ] **M2d** Request cancel or time limit.
@@ -289,7 +290,7 @@ The owner wants to know which models each user uses, how many tokens they consum
 ### Smaller planned items
 
 - [x] Friendly "offline" page (F11), styled, 2026-10-12.
-- [ ] A permanent "nothing is saved" notice for guests (the temporary-chat label disappears after the first message).
+- [ ] ~~A permanent "nothing is saved" notice for guests~~ Skipped by the owner 2026-10-14.
 - [ ] Thinking: limit it or make it a per-chat choice (section 8).
 - [ ] Warm-up request in the start command so the first person does not wait for the model to load.
 - [ ] Runaway replies: set top-k to the model's recommended value; deliberate Stop test; cancel or time limit in the gatekeeper.
